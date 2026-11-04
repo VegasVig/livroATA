@@ -1,0 +1,720 @@
+<script>
+(function () {
+'use strict';
+
+const ICON = {
+  painel: '<path d="M3 13h8V3H3zm10 8h8V11h-8zM3 21h8v-6H3zm10-18v6h8V3z"/>',
+  livro: '<path d="M5 3h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5zM5 3v18M9 7h6M9 11h6"/>',
+  busca: '<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/>',
+  posto: '<path d="M12 21s-7-6.5-7-12a7 7 0 0 1 14 0c0 5.5-7 12-7 12z"/><circle cx="12" cy="9" r="2.5"/>',
+  equipe: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6 6 0 0 1 3.5 6"/>',
+  auditoria: '<path d="M12 3 4 6v6c0 4.5 3.4 8.3 8 9 4.6-.7 8-4.5 8-9V6z"/><path d="m9 12 2 2 4-4"/>',
+  config: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.9 1.2V21a2 2 0 0 1-4 0v-.1A1.7 1.7 0 0 0 7 19.4a1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.7 1.7 0 0 0 1.2 14H1a2 2 0 0 1 0-4h.1A1.7 1.7 0 0 0 4.6 7a1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.7 1.7 0 0 0 10 1.2V1a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 2.9 1.2l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0 1.2 2.9h.1a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
+  caneta: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13 7 4 4"/>',
+  rascunho: '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/>',
+  meus: '<path d="M9 11l3 3 8-8"/><path d="M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9"/>',
+  sair: '<path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3"/>',
+  pdf: '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M12 12v6M9 15l3 3 3-3"/>',
+  voltar: '<path d="M15 18l-6-6 6-6"/>',
+  inicio: '<path d="M3 11 12 3l9 8M5 9.5V21h14V9.5"/>'
+};
+const ico = n => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (ICON[n] || '') + '</svg>';
+
+const NAV = {
+  ADMIN: [['painel', 'Painel', 'painel'], ['livros', 'Livros', 'livro'], ['registros', 'Registros', 'busca'], ['postos', 'Postos', 'posto'], ['equipe', 'Equipe', 'equipe'], ['auditoria', 'Auditoria', 'auditoria'], ['config', 'Configurações', 'config']],
+  SUPERVISOR: [['painel', 'Painel', 'painel'], ['livros', 'Livros', 'livro'], ['registros', 'Registros', 'busca'], ['equipe', 'Equipe', 'equipe']],
+  FUNCIONARIO: [['inicio', 'Início', 'inicio'], ['escrever', 'Escrever', 'caneta'], ['rascunhos', 'Rascunhos', 'rascunho'], ['meus', 'Meus registros', 'meus']]
+};
+const PERFIL_NOME = { ADMIN: 'Administrador geral', SUPERVISOR: 'Supervisor de posto', FUNCIONARIO: 'Vigilante' };
+
+const st = { token: '', user: null, view: '', params: {}, opcoes: null };
+try { st.token = sessionStorage.getItem('ata_t') || ''; } catch (e) {}
+
+const $ = (s, el) => (el || document).querySelector(s);
+const $$ = (s, el) => Array.from((el || document).querySelectorAll(s));
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const fmtDT = iso => { if (!iso) return '—'; const d = new Date(iso); return isNaN(d) ? iso : d.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }); };
+const fmtD = s => { if (!s) return '—'; const p = String(s).slice(0, 10).split('-'); return p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0] : s; };
+const hoje = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' });
+const pad = (n, t) => String(n).padStart(t, '0');
+const dispositivo = () => navigator.userAgent.slice(0, 240);
+const carregando = (t) => '<div class="carregando">' + esc(t || 'Carregando…') + '</div>';
+const vazio = t => '<div class="vazio">' + t + '</div>';
+const selo = s => s === 'ABERTO' ? '<span class="selo aberto">Aberto</span>' : '<span class="selo encerrado">Encerrado</span>';
+
+function toast(msg, tipo) {
+  const el = document.createElement('div');
+  el.className = 'toast ' + (tipo || '');
+  el.textContent = msg;
+  $('#toast-root').appendChild(el);
+  setTimeout(() => el.remove(), tipo === 'erro' ? 6000 : 3500);
+}
+
+function rpc(acao, payload) {
+  return new Promise((ok, falha) => {
+    google.script.run.withSuccessHandler(ok).withFailureHandler(e => ok({ ok: false, erro: 'Falha de conexão. Verifique a internet e tente de novo.', codigo: 'NET', detalhe: String(e) })).api(acao, st.token, payload || {});
+  });
+}
+
+async function call(acao, payload, tentativa) {
+  const r = await rpc(acao, payload);
+  if (r.ok) return r.dados;
+  if (r.codigo === 'SESSION') { sair(true); toast(r.erro, 'erro'); throw r; }
+  if (r.codigo === 'PIN_CHANGE') { telaTrocarPin(); throw r; }
+  if (r.codigo === 'CONSULTA' && !tentativa) {
+    const liberado = await pedirSenhaConsulta();
+    if (liberado) return call(acao, payload, true);
+  }
+  throw r;
+}
+
+function erro(e) { if (e && e.codigo !== 'SESSION' && e.codigo !== 'PIN_CHANGE') toast(e.erro || String(e), 'erro'); }
+
+function salvarToken(t) { st.token = t; try { t ? sessionStorage.setItem('ata_t', t) : sessionStorage.removeItem('ata_t'); } catch (e) {} }
+
+/* ---------- modal ---------- */
+function modal(titulo, corpo, opt) {
+  fecharModal();
+  const f = document.createElement('div');
+  f.className = 'modal-fundo';
+  f.innerHTML = '<div class="modal ' + ((opt && opt.largo) ? 'largo' : '') + '" role="dialog" aria-modal="true" aria-label="' + esc(titulo) + '"><header><h3>' + esc(titulo) + '</h3>' + (opt && opt.semFechar ? '' : '<button class="btn btn-texto" data-fechar>Fechar</button>') + '</header><div class="modal-corpo">' + corpo + '</div></div>';
+  $('#modal-root').appendChild(f);
+  f.addEventListener('click', e => { if (e.target.hasAttribute('data-fechar') || (e.target === f && !(opt && opt.semFechar))) fecharModal(); });
+  const foco = $('input,select,textarea,button:not([data-fechar])', f);
+  if (foco) setTimeout(() => foco.focus(), 30);
+  return f;
+}
+function fecharModal() { $('#modal-root').innerHTML = ''; }
+
+function confirmar(titulo, texto, rotulo, perigo) {
+  return new Promise(ok => {
+    const m = modal(titulo, '<p>' + texto + '</p><div class="acoes"><button class="btn ' + (perigo ? 'btn-perigo' : 'btn-metal') + '" data-sim>' + esc(rotulo || 'Confirmar') + '</button><button class="btn" data-nao>Cancelar</button></div>');
+    $('[data-sim]', m).onclick = () => { fecharModal(); ok(true); };
+    $('[data-nao]', m).onclick = () => { fecharModal(); ok(false); };
+  });
+}
+
+function pedirSenhaConsulta() {
+  return new Promise(ok => {
+    const m = modal('Senha de consulta', '<p class="muted">Os livros são protegidos por uma senha adicional de consulta. Ela vale até você sair do sistema.</p><form data-f><div class="campo"><label for="sc">Senha de consulta</label><input id="sc" type="password" autocomplete="off" required></div><div class="acoes"><button class="btn btn-metal" type="submit">Liberar consulta</button><button class="btn" type="button" data-cancel>Cancelar</button></div></form>');
+    $('[data-cancel]', m).onclick = () => { fecharModal(); ok(false); };
+    $('[data-f]', m).onsubmit = async ev => {
+      ev.preventDefault();
+      const b = $('button[type=submit]', m); b.disabled = true;
+      const r = await rpc('desbloquearConsulta', { senha: $('#sc', m).value });
+      b.disabled = false;
+      if (r.ok) { st.user = r.dados; fecharModal(); ok(true); } else toast(r.erro, 'erro');
+    };
+  });
+}
+
+/* ---------- login ---------- */
+function telaLogin() {
+  st.user = null;
+  document.title = 'Livro ATA Digital — Vegas Vigilância';
+  $('#app').innerHTML = '<main class="login"><div class="login-arte" role="img" aria-label="Livro ATA Digital Vegas Vigilância"></div><section class="login-painel">' +
+    '<h1>Entrar no Livro ATA</h1><p class="sub">Use sua matrícula e seu PIN pessoal.</p>' +
+    '<form id="fl"><div class="campo"><label for="lm">Matrícula</label><input id="lm" autocomplete="username" autocapitalize="characters" required></div>' +
+    '<div class="campo"><label for="lp">PIN</label><input id="lp" class="pin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="current-password" required></div>' +
+    '<button class="btn btn-metal btn-bloco" type="submit">Entrar</button></form>' +
+    '<p class="login-rodape">Esqueceu o PIN? Fale com seu supervisor ou com a administração.</p></section></main>';
+  $('#fl').onsubmit = async ev => {
+    ev.preventDefault();
+    const b = $('#fl button'); b.disabled = true; b.textContent = 'Entrando…';
+    const r = await rpc('login', { login: $('#lm').value, pin: $('#lp').value, dispositivo: dispositivo() });
+    b.disabled = false; b.textContent = 'Entrar';
+    if (!r.ok) { toast(r.erro, 'erro'); $('#lp').value = ''; $('#lp').focus(); return; }
+    salvarToken(r.dados.token); st.user = r.dados.usuario;
+    if (st.user.trocarPin) telaTrocarPin(); else iniciarApp();
+  };
+}
+
+function telaTrocarPin() {
+  $('#app').innerHTML = '<main class="login"><div class="login-arte"></div><section class="login-painel"><h1>Crie seu PIN</h1><p class="sub">Por segurança, troque o PIN provisório. Ele será usado para entrar e para assinar seus registros. Não compartilhe.</p>' +
+    '<form id="ft"><div class="campo"><label for="pa">PIN atual (provisório)</label><input id="pa" class="pin" type="password" inputmode="numeric" maxlength="8" required></div>' +
+    '<div class="campo"><label for="pn">Novo PIN</label><input id="pn" class="pin" type="password" inputmode="numeric" maxlength="8" required><span class="ajuda">De 4 a 8 números. Evite sequências e números repetidos.</span></div>' +
+    '<div class="campo"><label for="pc">Repita o novo PIN</label><input id="pc" class="pin" type="password" inputmode="numeric" maxlength="8" required></div>' +
+    '<button class="btn btn-metal btn-bloco" type="submit">Salvar novo PIN</button><button class="btn btn-texto btn-bloco" type="button" id="ts">Sair</button></form></section></main>';
+  $('#ts').onclick = () => sair();
+  $('#ft').onsubmit = async ev => {
+    ev.preventDefault();
+    if ($('#pn').value !== $('#pc').value) return toast('Os PINs digitados não conferem.', 'erro');
+    try { st.user = await call('trocarPin', { atual: $('#pa').value, novo: $('#pn').value }); toast('PIN salvo.', 'ok'); iniciarApp(); } catch (e) { erro(e); }
+  };
+}
+
+async function sair(silencioso) {
+  if (!silencioso && st.token) await rpc('logout', {});
+  salvarToken('');
+  fecharModal();
+  telaLogin();
+}
+
+/* ---------- casca ---------- */
+async function iniciarApp() {
+  try {
+    if (!st.user) st.user = await call('me');
+    if (st.user.trocarPin) return telaTrocarPin();
+    st.opcoes = await call('opcoes');
+  } catch (e) { if (e.codigo !== 'PIN_CHANGE' && e.codigo !== 'SESSION') { erro(e); telaLogin(); } return; }
+  const nav = NAV[st.user.perfil];
+  const botoes = nav.map(n => '<button class="nav-item" data-v="' + n[0] + '">' + ico(n[2]) + '<span>' + n[1] + '</span></button>').join('');
+  $('#app').innerHTML = '<div class="fundo"></div><div class="casca">' +
+    '<nav class="lateral" aria-label="Menu"><div class="marca"><img src="' + window.VEGAS_LOGO + '" alt="Vegas Vigilância"><div><b>Livro ATA Digital</b><span>Vegas Vigilância</span></div></div>' + botoes +
+    '<div class="usuario"><b>' + esc(st.user.nome) + '</b><small>' + esc(PERFIL_NOME[st.user.perfil]) + ' · ' + esc(st.user.login) + '</small><button class="nav-item" data-sair>' + ico('sair') + 'Sair</button></div></nav>' +
+    '<div><header class="topo-movel"><img src="' + window.VEGAS_LOGO + '" alt=""><b>Livro ATA Digital</b><button class="btn btn-texto" data-sair aria-label="Sair">' + ico('sair') + '</button></header>' +
+    '<main class="conteudo" id="v"></main></div>' +
+    '<nav class="barra-inferior" aria-label="Menu">' + nav.map(n => '<button class="nav-item" data-v="' + n[0] + '">' + ico(n[2]) + '<span>' + n[1] + '</span></button>').join('') + '</nav></div>';
+  $$('[data-v]').forEach(b => b.onclick = () => ir(b.dataset.v));
+  $$('[data-sair]').forEach(b => b.onclick = () => sair());
+  ir(nav[0][0]);
+}
+
+function ir(view, params) {
+  st.view = view; st.params = params || {};
+  const permitidas = NAV[st.user.perfil].map(n => n[0]).concat(['livro']);
+  $$('[data-v]').forEach(b => { if (b.dataset.v === view) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
+  const v = $('#v'); v.innerHTML = carregando();
+  window.scrollTo(0, 0);
+  const fn = VIEWS[view];
+  if (!fn || permitidas.indexOf(view) < 0) { v.innerHTML = vazio('Tela indisponível para o seu perfil.'); return; }
+  Promise.resolve(fn(v, st.params)).catch(e => { erro(e); v.innerHTML = vazio(esc(e.erro || 'Não foi possível carregar.') + '<br><br><button class="btn" onclick="location.reload()">Recarregar</button>'); });
+}
+
+const opt = (lista, val, vazioTxt) => (vazioTxt !== undefined ? '<option value="">' + esc(vazioTxt) + '</option>' : '') + lista.map(o => '<option value="' + esc(o[0]) + '"' + (o[0] === val ? ' selected' : '') + '>' + esc(o[1]) + '</option>').join('');
+const optPostos = (v, t) => opt(st.opcoes.postos.map(p => [p.id, p.codigo + ' — ' + p.nome]), v, t);
+const optFunc = (v, t) => opt(st.opcoes.funcionarios.map(f => [f.id, f.nome + ' (' + f.matricula + ')']), v, t);
+const optLivros = (v, t) => opt(st.opcoes.livros.map(l => [l.id, l.codigo + ' — ' + l.postoNome + (l.status === 'ENCERRADO' ? ' (encerrado)' : '')]), v, t);
+async function recarregarOpcoes() { st.opcoes = await call('opcoes'); }
+
+/* ---------- views ---------- */
+const VIEWS = {};
+
+VIEWS.painel = async function (v) {
+  v.innerHTML = '<div class="cabecalho"><div><h2 class="titulo">Painel</h2><p>' + (st.user.perfil === 'ADMIN' ? 'Visão de todos os postos.' : 'Postos sob sua responsabilidade.') + '</p></div></div>' +
+    '<form class="filtros" id="fp"><div class="campo"><label>Posto</label><select name="postoId">' + optPostos('', 'Todos') + '</select></div>' +
+    '<div class="campo"><label>Funcionário</label><select name="funcionarioId">' + optFunc('', 'Todos') + '</select></div>' +
+    '<div class="campo"><label>Livro</label><select name="livroId">' + optLivros('', 'Todos') + '</select></div>' +
+    '<div class="campo"><label>De</label><input type="date" name="de"></div><div class="campo"><label>Até</label><input type="date" name="ate"></div>' +
+    '<button class="btn" type="submit">Aplicar filtros</button></form><div id="pr">' + carregando() + '</div>';
+  const carregar = async () => {
+    const f = Object.fromEntries(new FormData($('#fp')));
+    $('#pr').innerHTML = carregando();
+    const d = await call('inicio', f);
+    const t = d.totais;
+    const cats = Object.entries(d.porCategoria).sort((a, b) => b[1] - a[1]);
+    const max = Math.max(1, ...cats.map(c => c[1]));
+    $('#pr').innerHTML = '<div class="numeros"><div><b>' + t.postos + '</b><span>Postos</span></div><div><b>' + t.livrosAbertos + '</b><span>Livros abertos</span></div><div><b>' + t.livrosEncerrados + '</b><span>Livros encerrados</span></div><div><b>' + t.registros + '</b><span>Registros assinados</span></div><div><b>' + t.funcionarios + '</b><span>Funcionários ativos</span></div><div class="' + (t.aguardandoEncerramento ? 'destaque' : '') + '"><b>' + t.aguardandoEncerramento + '</b><span>Aguardando encerramento</span></div></div>' +
+      '<div class="grade g2"><section class="painel"><h3>Últimos registros</h3><div class="lista">' +
+      (d.ultimos.length ? d.ultimos.map(r => '<button class="item" data-l="' + r.livroId + '" data-r="' + r.id + '"><b>' + esc(r.livroCodigo) + ' · nº ' + pad(r.numero, 4) + '</b><span class="pequeno muted">' + fmtDT(r.finalizadoEm) + '</span><small>' + esc(r.funcionarioNome) + ' — ' + esc(r.categoria || 'Sem categoria') + ' — ' + esc(r.postoNome) + '</small></button>').join('') : vazio('Nenhum registro no período.')) +
+      '</div></section><div class="grade"><section class="painel"><h3>Livros aguardando encerramento</h3><p class="pequeno muted">Abertos há mais de 30 dias ou com mais de 300 registros.</p><div class="lista">' +
+      (d.aguardando.length ? d.aguardando.map(l => '<button class="item" data-l="' + l.id + '"><b>' + esc(l.codigo) + '</b><span class="selo alerta">' + l.diasAberto + ' dias</span><small>' + esc(l.postoNome) + ' — ' + l.totalRegistros + ' registros</small></button>').join('') : vazio('Nenhum livro pendente.')) +
+      '</div></section><section class="painel"><h3>Registros por categoria</h3><div class="barras">' + (cats.length ? cats.map(c => '<div><span>' + esc(c[0]) + '</span><i style="width:' + Math.round(c[1] / max * 100) + '%"></i><b>' + c[1] + '</b></div>').join('') : vazio('Sem dados.')) + '</div></section></div></div>';
+    $$('#pr [data-l]').forEach(b => b.onclick = () => ir('livro', { id: b.dataset.l, reg: b.dataset.r }));
+  };
+  $('#fp').onsubmit = e => { e.preventDefault(); carregar().catch(erro); };
+  await carregar();
+};
+
+VIEWS.livros = async function (v) {
+  const sup = st.user.perfil === 'SUPERVISOR';
+  v.innerHTML = '<div class="cabecalho"><div><h2 class="titulo">Livros ATA</h2><p>Cada posto tem seu próprio histórico de livros.</p></div>' + (sup ? '<button class="btn btn-metal" id="nl">' + ico('livro') + 'Abrir novo livro</button>' : '') + '</div>' +
+    '<div class="filtros"><div class="campo"><label>Posto</label><select id="lp">' + optPostos('', 'Todos') + '</select></div><div class="campo"><label>Situação</label><select id="ls"><option value="">Todas</option><option value="ABERTO">Abertos</option><option value="ENCERRADO">Encerrados</option></select></div></div><div id="ll">' + carregando() + '</div>';
+  const carregar = async () => {
+    $('#ll').innerHTML = carregando();
+    const l = await call('listarLivros', { postoId: $('#lp').value, status: $('#ls').value });
+    $('#ll').innerHTML = l.length ? '<div class="painel"><div class="lista">' + l.map(x => '<button class="item" data-l="' + x.id + '"><b>' + esc(x.codigo) + ' · ' + esc(x.postoNome) + '</b>' + selo(x.status) + '<small>Livro nº ' + x.numero + ' · aberto em ' + fmtD(x.dataAbertura) + ' por ' + esc(x.supervisorNome) + ' · ' + x.totalRegistros + ' registros' + (x.status === 'ENCERRADO' ? ' · encerrado em ' + fmtDT(x.encerradoEm) : '') + (x.aguardandoEncerramento ? ' · <span style="color:var(--alerta)">aguardando encerramento</span>' : '') + '</small></button>').join('') + '</div></div>' : vazio(sup ? 'Nenhum livro ainda. Abra o primeiro livro do seu posto.' : 'Nenhum livro encontrado.');
+    $$('#ll [data-l]').forEach(b => b.onclick = () => ir('livro', { id: b.dataset.l }));
+  };
+  $('#lp').onchange = $('#ls').onchange = () => carregar().catch(erro);
+  if (sup) $('#nl').onclick = () => modalNovoLivro(carregar);
+  await carregar();
+};
+
+function checksFuncionarios(postoId, marcados) {
+  const l = st.opcoes.funcionarios.filter(f => f.ativo && f.postoIds.indexOf(postoId) >= 0);
+  if (!l.length) return '<div class="aviso alerta">Nenhum funcionário ativo vinculado a este posto. Peça à administração para vincular a equipe.</div>';
+  return '<div class="checks">' + l.map(f => '<label class="check"><input type="checkbox" name="aut" value="' + f.id + '"' + (marcados.indexOf(f.id) >= 0 ? ' checked' : '') + '>' + esc(f.nome) + ' <span class="muted pequeno">' + esc(f.matricula) + '</span></label>').join('') + '</div>';
+}
+
+function modalNovoLivro(depois) {
+  if (!st.opcoes.postos.length) return toast('Você ainda não tem postos vinculados. Fale com a administração.', 'erro');
+  const p0 = st.opcoes.postos[0];
+  const m = modal('Abrir novo Livro ATA', '<form id="fn"><div class="campo"><label>Posto</label><select name="postoId" id="np">' + optPostos(p0.id) + '</select></div>' +
+    '<div class="campo"><label>Nome do posto no livro</label><input name="postoNome" id="nn" value="' + esc(p0.nome) + '" maxlength="120" required></div>' +
+    '<div class="campo"><label>Data de abertura</label><input type="date" name="dataAbertura" value="' + hoje() + '" required></div>' +
+    '<div class="campo"><label>Funcionários autorizados a escrever</label><div id="na">' + checksFuncionarios(p0.id, []) + '</div></div>' +
+    '<p class="pequeno muted">O número do livro, o horário de abertura e o termo de abertura são gerados pelo sistema.</p>' +
+    '<button class="btn btn-metal btn-bloco" type="submit">Abrir livro</button></form>', { largo: true });
+  $('#np', m).onchange = e => { const p = st.opcoes.postos.find(x => x.id === e.target.value); $('#nn', m).value = p ? p.nome : ''; $('#na', m).innerHTML = checksFuncionarios(e.target.value, []); };
+  $('#fn', m).onsubmit = async ev => {
+    ev.preventDefault();
+    const fd = new FormData(ev.target);
+    const b = $('button[type=submit]', m); b.disabled = true;
+    try {
+      const l = await call('criarLivro', { postoId: fd.get('postoId'), postoNome: fd.get('postoNome'), dataAbertura: fd.get('dataAbertura'), autorizados: fd.getAll('aut') });
+      fecharModal(); toast('Livro ' + l.codigo + ' aberto.', 'ok'); await recarregarOpcoes(); ir('livro', { id: l.id });
+    } catch (e) { erro(e); b.disabled = false; }
+  };
+}
+
+VIEWS.livro = async function (v, p) {
+  const d = await call('verLivro', { livroId: p.id });
+  const l = d.livro, gestor = st.user.perfil !== 'FUNCIONARIO';
+  const acoes = [];
+  if (d.podeEscrever) acoes.push('<button class="btn btn-metal" data-a="escrever">' + ico('caneta') + 'Escrever neste livro</button>');
+  if (gestor) acoes.push('<button class="btn" data-a="pdf">' + ico('pdf') + 'Gerar PDF</button>', '<button class="btn" data-a="integ">' + ico('auditoria') + 'Verificar integridade</button>', '<button class="btn" data-a="status">Quem assinou</button>');
+  if (d.podeGerir) acoes.push('<button class="btn" data-a="aut">Autorizados</button>', '<button class="btn btn-perigo" data-a="encerrar">Encerrar livro</button>');
+  if (l.pdfUrl) acoes.push('<a class="btn btn-texto" href="' + esc(l.pdfUrl) + '" target="_blank" rel="noopener">Último PDF (' + fmtDT(l.pdfGeradoEm) + ')</a>');
+
+  const termoAbertura = 'Este livro, de número ' + l.numero + ', destina-se ao registro das ocorrências e comunicações do posto ' + l.postoNome + ', sob responsabilidade da Vegas Vigilância. Aberto em ' + fmtD(l.dataAbertura) + ' (registro no sistema em ' + fmtDT(l.abertoEm) + ') pelo supervisor ' + l.supervisorNome + '.\nFuncionários autorizados: ' + l.autorizados.map(a => a.nome + ' (' + a.matricula + ')').join('; ') + '.';
+  const entradas = d.registros.map(r => '<article class="entrada" id="reg-' + r.id + '"><span class="num">' + pad(r.numero, 3) + '</span>' +
+    '<div class="meta"><b>' + fmtDT(r.finalizadoEm) + '</b><span>' + esc(r.categoria || 'Sem categoria') + '</span><span>' + esc(r.funcionarioNome) + ' · ' + esc(r.matricula) + '</span></div>' +
+    (r.tipo === 'RETIFICACAO' ? '<div class="ret">Retificação do registro nº ' + pad(r.retificaNumero, 3) + (r.retificaLivroCodigo && r.retificaLivroCodigo !== l.codigo ? ' do livro ' + esc(r.retificaLivroCodigo) : '') + '</div>' : '') +
+    (r.retificadoPor.length ? '<div class="ret">Retificado pelo registro ' + r.retificadoPor.map(x => 'nº ' + pad(x.numero, 3) + (x.livroCodigo !== l.codigo ? ' (' + esc(x.livroCodigo) + ')' : '')).join(', ') + '. O texto original abaixo permanece inalterado.</div>' : '') +
+    '<p class="texto">' + esc(r.texto) + '</p>' +
+    '<div class="assina"><div class="img" data-ass="' + r.assinaturaId + '"></div><small>' + esc(r.funcionarioNome) + '<br>Assinado com PIN e assinatura manuscrita em ' + fmtDT(r.finalizadoEm) + '</small></div>' +
+    '<div class="integ">Integridade: ' + esc(r.codigoIntegridade) + ' · SHA-256 ' + esc(r.hashRegistro) + '</div></article>').join('');
+  const termoEnc = l.status === 'ENCERRADO' ? '<section class="folha termo"><h4>TERMO DE ENCERRAMENTO</h4><p>Encerrado em ' + fmtDT(l.encerradoEm) + ' por ' + esc(l.encerradoPorNome) + ', contendo ' + l.totalRegistros + ' registro(s) assinado(s).' + (l.obsEncerramento ? '\nObservação: ' + esc(l.obsEncerramento) : '') + '</p><div class="integ" style="font:12px/1.4 var(--t-livro);color:var(--tinta-suave);word-break:break-all">Hash de encerramento: ' + esc(l.hashEncerramento) + '</div></section>' : '';
+
+  v.innerHTML = '<div class="cabecalho"><div><button class="btn btn-texto" data-a="voltar">' + ico('voltar') + 'Voltar</button><h2 class="titulo">' + esc(l.codigo) + ' ' + selo(l.status) + '</h2><p>' + esc(l.postoNome) + ' · ' + l.totalRegistros + ' registro(s)</p></div><div class="acoes">' + acoes.join('') + '</div></div>' +
+    '<div class="livro"><div class="livro-topo"><img src="' + window.VEGAS_LOGO + '" alt="Vegas Vigilância"><div><h3>Livro ATA nº ' + l.numero + ' — ' + esc(l.postoNome) + '</h3><p>Vegas Vigilância · Transparência, responsabilidade e segurança em cada registro.</p></div></div>' +
+    '<section class="folha termo"><h4>TERMO DE ABERTURA</h4><p>' + esc(termoAbertura) + '</p></section>' +
+    '<section class="folha">' + (entradas || '<p class="texto" style="font:16px/var(--linha) var(--t-livro);color:var(--tinta-suave)">Nenhum registro assinado neste livro.</p>') + '</section>' + termoEnc + '</div>';
+
+  $$('[data-a]', v).forEach(b => b.onclick = () => {
+    const a = b.dataset.a;
+    if (a === 'voltar') return ir(st.user.perfil === 'FUNCIONARIO' ? 'inicio' : 'livros');
+    if (a === 'escrever') return ir('escrever', { livroId: l.id });
+    if (a === 'pdf') return gerarPdf(l.id, b);
+    if (a === 'integ') return verificarLivro(l.id);
+    if (a === 'status') return modalStatus(l.id);
+    if (a === 'aut') return modalAutorizados(l);
+    if (a === 'encerrar') return encerrarLivro(l);
+  });
+  carregarAssinaturas(l.id, v);
+  if (p.reg) { const el = $('#reg-' + p.reg); if (el) { el.scrollIntoView({ block: 'center' }); el.classList.add('foco'); } }
+};
+
+async function carregarAssinaturas(livroId, v) {
+  const alvos = $$('[data-ass]', v);
+  for (let i = 0; i < alvos.length; i += 40) {
+    const lote = alvos.slice(i, i + 40);
+    try {
+      const imgs = await call('assinaturas', { livroId: livroId, ids: lote.map(x => x.dataset.ass) });
+      lote.forEach(x => { if (imgs[x.dataset.ass]) x.innerHTML = '<img alt="Assinatura" src="' + imgs[x.dataset.ass] + '">'; });
+    } catch (e) { return; }
+  }
+}
+
+async function verificarLivro(livroId) {
+  modal('Verificação de integridade', carregando('Recalculando a cadeia de hashes…'));
+  try {
+    const r = await call('verificarIntegridade', { livroId: livroId });
+    modal('Verificação de integridade', '<div class="aviso ' + (r.ok ? 'ok' : 'erro') + '">' + (r.ok ? 'Íntegro. Os ' + r.totalRegistros + ' registros, assinaturas e termos conferem com a cadeia de hashes.' : 'Foram encontradas divergências. Comunique a administração imediatamente.') + '</div>' +
+      (r.problemas.length ? '<ul>' + r.problemas.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul>' : '') + '<p class="hash">Último hash: ' + esc(r.ultimoHash) + '<br>Verificado em ' + fmtDT(r.verificadoEm) + '</p>');
+  } catch (e) { fecharModal(); erro(e); }
+}
+
+async function modalStatus(livroId) {
+  modal('Quem já assinou', carregando());
+  try {
+    const d = await call('statusAssinaturas', { livroId: livroId });
+    modal('Quem já assinou — ' + d.livro.codigo, '<div class="rolagem"><table class="tabela"><thead><tr><th>Funcionário</th><th>Assinados</th><th>Rascunhos pendentes</th><th>Último registro</th></tr></thead><tbody>' +
+      d.autorizados.map(f => '<tr><td>' + esc(f.nome) + '<br><span class="muted pequeno">' + esc(f.matricula) + '</span></td><td>' + (f.assinados ? f.assinados : '<span class="selo alerta">Nenhum</span>') + '</td><td>' + (f.rascunhos ? '<span class="selo alerta">' + f.rascunhos + '</span>' : '0') + '</td><td>' + fmtDT(f.ultimoEm) + '</td></tr>').join('') +
+      '</tbody></table></div>' + (d.naoAutorizados.length ? '<p class="pequeno muted">Vinculados ao posto, mas sem autorização neste livro: ' + d.naoAutorizados.map(f => esc(f.nome)).join(', ') + '.</p>' : ''), { largo: true });
+  } catch (e) { fecharModal(); erro(e); }
+}
+
+function modalAutorizados(l) {
+  const m = modal('Funcionários autorizados — ' + l.codigo, '<form id="fa">' + checksFuncionarios(l.postoId, l.autorizados.map(a => a.id)) + '<p class="pequeno muted">Remover a autorização não apaga registros já assinados.</p><button class="btn btn-metal btn-bloco" type="submit">Salvar autorizados</button></form>');
+  $('#fa', m).onsubmit = async ev => {
+    ev.preventDefault();
+    try { await call('atualizarAutorizados', { livroId: l.id, autorizados: new FormData(ev.target).getAll('aut') }); fecharModal(); toast('Autorizados atualizados.', 'ok'); ir('livro', { id: l.id }); } catch (e) { erro(e); }
+  };
+}
+
+function encerrarLivro(l) {
+  const m = modal('Encerrar ' + l.codigo, '<div class="aviso alerta">Depois de encerrado, o livro não aceita novos registros. Os registros e assinaturas ficam preservados para consulta e PDF.</div><form id="fe"><div class="campo"><label>Observação de encerramento (opcional)</label><textarea name="obs" maxlength="1000"></textarea></div><button class="btn btn-perigo btn-bloco" type="submit">Encerrar livro</button></form>');
+  $('#fe', m).onsubmit = async ev => {
+    ev.preventDefault();
+    const obs = ev.target.obs.value;
+    try {
+      let r = await call('encerrarLivro', { livroId: l.id, obs: obs });
+      if (r.pendente) {
+        const ok = await confirmar('Rascunhos não assinados', 'Há ' + r.rascunhos + ' rascunho(s) não assinado(s) neste livro. Eles não entrarão no livro e não poderão mais ser assinados. Encerrar mesmo assim?', 'Encerrar mesmo assim', true);
+        if (!ok) return;
+        r = await call('encerrarLivro', { livroId: l.id, obs: obs, forcar: true });
+      }
+      fecharModal(); toast('Livro encerrado.', 'ok'); await recarregarOpcoes(); ir('livro', { id: l.id });
+    } catch (e) { erro(e); }
+  };
+}
+
+VIEWS.registros = async function (v) {
+  v.innerHTML = '<div class="cabecalho"><div><h2 class="titulo">Consultar registros</h2><p>Busque por posto, funcionário, livro e período.</p></div></div>' +
+    '<form class="filtros" id="fr"><div class="campo"><label>Posto</label><select name="postoId">' + optPostos('', 'Todos') + '</select></div><div class="campo"><label>Livro</label><select name="livroId">' + optLivros('', 'Todos') + '</select></div>' +
+    '<div class="campo"><label>Funcionário</label><select name="funcionarioId">' + optFunc('', 'Todos') + '</select></div><div class="campo"><label>Categoria</label><select name="categoria">' + opt(st.opcoes.categorias.concat(['Retificação']).map(c => [c, c]), '', 'Todas') + '</select></div>' +
+    '<div class="campo"><label>De</label><input type="date" name="de"></div><div class="campo"><label>Até</label><input type="date" name="ate"></div><div class="campo"><label>Texto contém</label><input name="texto"></div><button class="btn btn-metal" type="submit">Buscar</button></form><div id="rr"></div>';
+  $('#fr').onsubmit = async ev => {
+    ev.preventDefault();
+    $('#rr').innerHTML = carregando();
+    try {
+      const d = await call('buscarRegistros', Object.fromEntries(new FormData(ev.target)));
+      $('#rr').innerHTML = '<p class="muted pequeno">' + d.total + ' registro(s)' + (d.total > 200 ? ', exibindo os 200 mais recentes' : '') + '.</p>' + (d.itens.length ? '<div class="painel"><div class="lista">' + d.itens.map(r => '<button class="item" data-l="' + r.livroId + '" data-r="' + r.id + '"><b>' + esc(r.livroCodigo) + ' · nº ' + pad(r.numero, 4) + ' · ' + esc(r.categoria || 'Sem categoria') + '</b><span class="pequeno muted">' + fmtDT(r.finalizadoEm) + '</span><small>' + esc(r.funcionarioNome) + ' — ' + esc(r.texto.slice(0, 160)) + (r.texto.length > 160 ? '…' : '') + '</small></button>').join('') + '</div></div>' : vazio('Nada encontrado com esses filtros.'));
+      $$('#rr [data-l]').forEach(b => b.onclick = () => ir('livro', { id: b.dataset.l, reg: b.dataset.r }));
+    } catch (e) { $('#rr').innerHTML = ''; erro(e); }
+  };
+};
+
+VIEWS.postos = async function (v) {
+  const l = await call('listarPostos');
+  v.innerHTML = '<div class="cabecalho"><div><h2 class="titulo">Postos de serviço</h2><p>' + l.length + ' posto(s) cadastrado(s).</p></div><button class="btn btn-metal" id="np">Cadastrar posto</button></div>' +
+    (l.length ? '<div class="painel rolagem"><table class="tabela"><thead><tr><th>Código</th><th>Posto</th><th>Cliente</th><th>Situação</th><th></th></tr></thead><tbody>' + l.map(p => '<tr><td>' + esc(p.codigo) + '</td><td>' + esc(p.nome) + '<br><span class="muted pequeno">' + esc(p.endereco) + '</span></td><td>' + esc(p.cliente) + '</td><td>' + (p.ativo ? '<span class="selo aberto">Ativo</span>' : '<span class="selo encerrado">Inativo</span>') + '</td><td><button class="btn btn-texto" data-e="' + p.id + '">Editar</button></td></tr>').join('') + '</tbody></table></div>' : vazio('Cadastre o primeiro posto para começar.'));
+  const form = p => {
+    p = p || { ativo: true };
+    const m = modal(p.id ? 'Editar posto' : 'Cadastrar posto', '<form id="fpo"><div class="campo"><label>Código</label><input name="codigo" value="' + esc(p.codigo || '') + '" maxlength="20" required><span class="ajuda">Ex.: VR01. Compõe o número dos livros (VR01-L001).</span></div>' +
+      '<div class="campo"><label>Nome do posto</label><input name="nome" value="' + esc(p.nome || '') + '" maxlength="120" required></div><div class="campo"><label>Cliente</label><input name="cliente" value="' + esc(p.cliente || '') + '" maxlength="120"></div>' +
+      '<div class="campo"><label>Endereço</label><input name="endereco" value="' + esc(p.endereco || '') + '" maxlength="200"></div><label class="check"><input type="checkbox" name="ativo"' + (p.ativo ? ' checked' : '') + '> Posto ativo</label><br><button class="btn btn-metal btn-bloco" type="submit">Salvar posto</button></form>');
+    $('#fpo', m).onsubmit = async ev => {
+      ev.preventDefault();
+      const f = ev.target;
+      try { await call('salvarPosto', { id: p.id, codigo: f.codigo.value, nome: f.nome.value, cliente: f.cliente.value, endereco: f.endereco.value, ativo: f.ativo.checked }); fecharModal(); toast('Posto salvo.', 'ok'); await recarregarOpcoes(); ir('postos'); } catch (e) { erro(e); }
+    };
+  };
+  $('#np').onclick = () => form();
+  $$('[data-e]', v).forEach(b => b.onclick = () => form(l.find(x => x.id === b.dataset.e)));
+};
+
+VIEWS.equipe = async function (v) {
+  const admin = st.user.perfil === 'ADMIN';
+  const abas = admin ? [['FUNCIONARIO', 'Funcionários'], ['SUPERVISOR', 'Supervisores'], ['ADMIN', 'Administradores']] : [['FUNCIONARIO', 'Funcionários']];
+  const aba = st.params.aba || 'FUNCIONARIO';
+  v.innerHTML = '<div class="cabecalho"><div><h2 class="titulo">Equipe</h2><p>' + (admin ? 'Cadastros, vínculos com postos e acessos.' : 'Funcionários vinculados aos seus postos.') + '</p></div>' + (admin ? '<button class="btn btn-metal" id="nova">Cadastrar</button>' : '') + '</div>' +
+    '<div class="abas" role="tablist">' + abas.map(a => '<button class="aba" role="tab" aria-selected="' + (a[0] === aba) + '" data-aba="' + a[0] + '">' + a[1] + '</button>').join('') + '</div><div id="eq">' + carregando() + '</div>';
+  $$('[data-aba]', v).forEach(b => b.onclick = () => ir('equipe', { aba: b.dataset.aba }));
+  const acao = { FUNCIONARIO: 'listarFuncionarios', SUPERVISOR: 'listarSupervisores', ADMIN: 'listarAdmins' }[aba];
+  const l = await call(acao);
+  const nomePosto = id => { const p = st.opcoes.postos.find(x => x.id === id); return p ? p.codigo : '?'; };
+  $('#eq').innerHTML = l.length ? '<div class="painel rolagem"><table class="tabela"><thead><tr><th>Nome</th><th>Matrícula</th>' + (aba !== 'ADMIN' ? '<th>Postos</th>' : '') + '<th>Acesso</th>' + (admin ? '<th></th>' : '') + '</tr></thead><tbody>' +
+    l.map(p => '<tr><td>' + esc(p.nome) + (p.email ? '<br><span class="muted pequeno">' + esc(p.email) + '</span>' : '') + '</td><td>' + esc(p.matricula) + '</td>' + (aba !== 'ADMIN' ? '<td>' + (p.postoIds.map(nomePosto).join(', ') || '—') + '</td>' : '') +
+      '<td>' + (p.ativo ? (p.bloqueado ? '<span class="selo erro">Bloqueado</span>' : '<span class="selo aberto">Ativo</span>') : '<span class="selo encerrado">Desativado</span>') + (p.trocarPin ? ' <span class="selo alerta">PIN provisório</span>' : '') + '<br><span class="muted pequeno">Último acesso: ' + fmtDT(p.ultimoAcesso) + '</span></td>' +
+      (admin ? '<td><div class="acoes"><button class="btn btn-texto" data-ed="' + p.id + '">Editar</button><button class="btn btn-texto" data-pin="' + p.id + '">Novo PIN</button>' + (p.bloqueado ? '<button class="btn btn-texto" data-st="desbloquear" data-id="' + p.id + '">Desbloquear</button>' : '') + '<button class="btn btn-texto" data-st="' + (p.ativo ? 'desativar' : 'ativar') + '" data-id="' + p.id + '">' + (p.ativo ? 'Desativar' : 'Reativar') + '</button></div></td>' : '') + '</tr>').join('') +
+    '</tbody></table></div>' : vazio('Nenhum cadastro nesta lista.');
+  if (!admin) return;
+  const form = p => {
+    p = p || { postoIds: [] };
+    const comPostos = aba !== 'ADMIN';
+    const m = modal((p.id ? 'Editar ' : 'Cadastrar ') + { FUNCIONARIO: 'funcionário', SUPERVISOR: 'supervisor', ADMIN: 'administrador' }[aba],
+      '<form id="fq"><div class="campo"><label>Nome completo</label><input name="nome" value="' + esc(p.nome || '') + '" maxlength="120" required></div>' +
+      '<div class="campo"><label>Matrícula</label><input name="matricula" value="' + esc(p.matricula || '') + '" maxlength="30" required><span class="ajuda">É o login de acesso.</span></div>' +
+      (aba === 'SUPERVISOR' ? '<div class="campo"><label>E-mail</label><input type="email" name="email" value="' + esc(p.email || '') + '"></div>' : '') +
+      (comPostos ? '<div class="campo"><label>' + (aba === 'SUPERVISOR' ? 'Postos sob responsabilidade' : 'Postos autorizados') + '</label><div class="checks">' + (st.opcoes.postos.length ? st.opcoes.postos.map(x => '<label class="check"><input type="checkbox" name="postos" value="' + x.id + '"' + (p.postoIds.indexOf(x.id) >= 0 ? ' checked' : '') + '>' + esc(x.codigo + ' — ' + x.nome) + '</label>').join('') : '<span class="muted">Cadastre postos primeiro.</span>') + '</div></div>' : '') +
+      (!p.id ? '<div class="campo"><label>PIN inicial (opcional)</label><input name="pin" class="pin" inputmode="numeric" maxlength="8"><span class="ajuda">Deixe em branco para gerar um PIN provisório. A troca é obrigatória no primeiro acesso.</span></div>' : '') +
+      '<button class="btn btn-metal btn-bloco" type="submit">Salvar</button></form>');
+    $('#fq', m).onsubmit = async ev => {
+      ev.preventDefault();
+      const f = ev.target, fd = new FormData(f);
+      const dados = { id: p.id, nome: fd.get('nome'), matricula: fd.get('matricula'), email: fd.get('email') || '', postoIds: fd.getAll('postos'), pin: fd.get('pin') || '' };
+      try {
+        const r = await call({ FUNCIONARIO: 'salvarFuncionario', SUPERVISOR: 'salvarSupervisor', ADMIN: 'salvarAdmin' }[aba], dados);
+        await recarregarOpcoes();
+        if (r.pinInicial) mostrarPin(dados.matricula.toUpperCase(), r.pinInicial); else { fecharModal(); toast('Cadastro salvo.', 'ok'); }
+        ir('equipe', { aba: aba });
+      } catch (e) { erro(e); }
+    };
+  };
+  $('#nova').onclick = () => form();
+  $$('[data-ed]', v).forEach(b => b.onclick = () => form(l.find(x => x.id === b.dataset.ed)));
+  $$('[data-pin]', v).forEach(b => b.onclick = async () => {
+    const p = l.find(x => x.id === b.dataset.pin);
+    if (!(await confirmar('Gerar novo PIN', 'O PIN atual de ' + esc(p.nome) + ' deixará de funcionar. Um PIN provisório será exibido uma única vez.', 'Gerar PIN'))) return;
+    try { const r = await call('redefinirPin', { id: p.id, tipo: aba }); mostrarPin(r.login, r.pinInicial); ir('equipe', { aba: aba }); } catch (e) { erro(e); }
+  });
+  $$('[data-st]', v).forEach(b => b.onclick = async () => {
+    const p = l.find(x => x.id === b.dataset.id), a = b.dataset.st;
+    if (a === 'desativar' && !(await confirmar('Desativar acesso', esc(p.nome) + ' perderá o acesso imediatamente. Os registros assinados continuam preservados.', 'Desativar', true))) return;
+    try { await call('definirStatusAcesso', { id: p.id, tipo: aba, acao: a }); toast('Acesso atualizado.', 'ok'); await recarregarOpcoes(); ir('equipe', { aba: aba }); } catch (e) { erro(e); }
+  });
+};
+
+function mostrarPin(login, pin) {
+  modal('PIN provisório', '<p>Entregue estes dados pessoalmente. O PIN não será exibido novamente.</p><div class="painel" style="text-align:center"><p class="muted">Matrícula</p><p class="pin">' + esc(login) + '</p><p class="muted">PIN provisório</p><p class="pin">' + esc(pin) + '</p></div><p class="pequeno muted">No primeiro acesso, o sistema exige a troca do PIN.</p><button class="btn btn-metal btn-bloco" data-fechar>Entendi</button>');
+}
+
+VIEWS.auditoria = async function (v) {
+  v.innerHTML = '<div class="cabecalho"><div><h2 class="titulo">Auditoria</h2><p>Trilha encadeada de acessos e ações. Nenhuma linha pode ser alterada pelo sistema.</p></div><button class="btn" id="vt">' + ico('auditoria') + 'Verificar todo o sistema</button></div>' +
+    '<form class="filtros" id="fa"><div class="campo"><label>Ação</label><select name="acao" id="aa"><option value="">Todas</option></select></div><div class="campo"><label>Matrícula</label><input name="login"></div>' +
+    '<div class="campo"><label>Resultado</label><select name="resultado"><option value="">Todos</option><option>OK</option><option>NEGADO</option><option>ALERTA</option><option>ERRO</option></select></div>' +
+    '<div class="campo"><label>De</label><input type="date" name="de"></div><div class="campo"><label>Até</label><input type="date" name="ate"></div><button class="btn" type="submit">Filtrar</button></form><div id="al">' + carregando() + '</div>';
+  let acoesCarregadas = false;
+  const carregar = async () => {
+    $('#al').innerHTML = carregando();
+    const d = await call('logs', Object.fromEntries(new FormData($('#fa'))));
+    if (!acoesCarregadas) { $('#aa').innerHTML = '<option value="">Todas</option>' + d.acoes.map(a => '<option>' + esc(a) + '</option>').join(''); acoesCarregadas = true; }
+    $('#al').innerHTML = '<p class="muted pequeno">' + d.total + ' evento(s)' + (d.total > 300 ? ', exibindo os 300 mais recentes' : '') + '.</p>' + (d.itens.length ? '<div class="painel rolagem"><table class="tabela"><thead><tr><th>Data/hora</th><th>Usuário</th><th>Ação</th><th>Resultado</th><th>Detalhes</th></tr></thead><tbody>' +
+      d.itens.map(e => '<tr><td>' + fmtDT(e.dataHora) + '</td><td>' + esc(e.login || '—') + '<br><span class="muted pequeno">' + esc(e.perfil) + '</span></td><td>' + esc(e.acao) + '<br><span class="muted pequeno">' + esc(e.entidade) + ' ' + esc(e.entidadeId) + '</span></td><td><span class="selo ' + (e.resultado === 'OK' ? 'aberto' : e.resultado === 'NEGADO' || e.resultado === 'ERRO' ? 'erro' : 'alerta') + '">' + esc(e.resultado) + '</span></td><td class="hash" style="max-width:340px">' + esc(e.detalhes) + '</td></tr>').join('') + '</tbody></table></div>' : vazio('Nenhum evento.'));
+  };
+  $('#fa').onsubmit = e => { e.preventDefault(); carregar().catch(erro); };
+  $('#vt').onclick = verificarTudo;
+  await carregar();
+};
+
+async function verificarTudo() {
+  modal('Verificação geral', carregando('Recalculando todos os livros e a auditoria…'));
+  try {
+    const r = await call('verificarIntegridade', {});
+    const ruins = r.livros.filter(l => !l.ok);
+    modal('Verificação geral', '<div class="aviso ' + (r.ok ? 'ok' : 'erro') + '">' + (r.ok ? 'Tudo íntegro: ' + r.livros.length + ' livro(s) e ' + r.logs.total + ' evento(s) de auditoria conferidos.' : 'Divergências encontradas. Preserve os backups e investigue antes de qualquer correção.') + '</div>' +
+      ruins.map(l => '<h3>' + esc(l.codigo) + '</h3><ul>' + l.problemas.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul>').join('') +
+      (r.logs.ok ? '' : '<h3>Auditoria</h3><ul>' + r.logs.problemas.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul>') + '<p class="hash">Verificado em ' + fmtDT(r.verificadoEm) + '</p>', { largo: true });
+  } catch (e) { fecharModal(); erro(e); }
+}
+
+VIEWS.config = async function (v) {
+  v.innerHTML = '<div class="cabecalho"><div><h2 class="titulo">Configurações</h2><p>Proteções do sistema.</p></div></div><div class="grade g2">' +
+    '<section class="painel"><h3>Senha de consulta dos livros</h3><p class="muted pequeno">Exigida uma vez por sessão para ler livros e registros. Fica guardada no servidor como hash; não aparece no navegador.</p><form id="fs"><div class="campo"><label>Nova senha de consulta</label><input name="senha" type="password" minlength="6" required></div><div class="campo"><label>Repita a nova senha</label><input name="senha2" type="password" required></div><div class="campo"><label>Seu PIN (confirmação)</label><input name="pin" class="pin" type="password" inputmode="numeric" maxlength="8" required></div><button class="btn btn-metal" type="submit">Alterar senha de consulta</button></form></section>' +
+    '<section class="painel"><h3>Integridade e backup</h3><p class="muted pequeno">Todo dia às 03h o sistema verifica a cadeia de hashes, copia a planilha para a pasta de backup e envia por e-mail a âncora diária com o último hash de cada livro.</p><button class="btn" id="vt2">' + ico('auditoria') + 'Verificar agora</button></section></div>';
+  $('#vt2').onclick = verificarTudo;
+  $('#fs').onsubmit = async ev => {
+    ev.preventDefault();
+    const f = ev.target;
+    if (f.senha.value !== f.senha2.value) return toast('As senhas não conferem.', 'erro');
+    try { await call('alterarSenhaConsulta', { senha: f.senha.value, pin: f.pin.value }); f.reset(); toast('Senha de consulta alterada.', 'ok'); } catch (e) { erro(e); }
+  };
+};
+
+/* ---------- vigilante ---------- */
+VIEWS.inicio = async function (v) {
+  const d = await call('inicio');
+  const primeiro = st.user.nome.split(' ')[0];
+  v.innerHTML = '<div class="cabecalho"><div><h2 class="titulo">Olá, ' + esc(primeiro) + '</h2><p>' + (d.postos.map(p => p.nome).join(', ') || 'Sem posto vinculado') + '</p></div></div>' +
+    '<div class="numeros"><div><b>' + d.livros.length + '</b><span>Livros abertos para você</span></div><div class="' + (d.rascunhos ? 'destaque' : '') + '"><b>' + d.rascunhos + '</b><span>Rascunhos sem assinatura</span></div><div><b>' + d.assinados + '</b><span>Registros assinados</span></div></div>' +
+    (d.rascunhos ? '<div class="aviso alerta">Você tem rascunho(s) não assinado(s). Um rascunho não faz parte do livro até ser assinado. <button class="btn btn-texto" id="vr">Ver rascunhos</button></div>' : '') +
+    '<section class="painel"><h3>Seus livros</h3>' + (d.livros.length ? '<div class="lista">' + d.livros.map(l => '<div class="item" style="cursor:default"><div><b>' + esc(l.codigo) + ' · ' + esc(l.postoNome) + '</b><br><span class="muted pequeno">' + l.totalRegistros + ' registros · aberto em ' + fmtD(l.dataAbertura) + '</span></div><div class="acoes"><button class="btn btn-metal" data-esc="' + l.id + '">' + ico('caneta') + 'Escrever</button><button class="btn" data-ler="' + l.id + '">Ler</button></div></div>').join('') + '</div>' : vazio('Nenhum livro aberto em que você esteja autorizado. Fale com seu supervisor.')) + '</section>';
+  $$('[data-esc]', v).forEach(b => b.onclick = () => ir('escrever', { livroId: b.dataset.esc }));
+  $$('[data-ler]', v).forEach(b => b.onclick = () => ir('livro', { id: b.dataset.ler }));
+  const vr = $('#vr'); if (vr) vr.onclick = () => ir('rascunhos');
+};
+
+VIEWS.rascunhos = async function (v) {
+  const l = await call('meusRascunhos');
+  v.innerHTML = '<div class="cabecalho"><div><h2 class="titulo">Rascunhos</h2><p>Textos salvos e ainda não assinados. Só você vê seus rascunhos.</p></div></div>' +
+    (l.length ? '<div class="painel"><div class="lista">' + l.map(r => '<div class="item" style="cursor:default"><div><b>' + esc(r.livroCodigo) + ' · ' + esc(r.categoria || 'Sem categoria') + '</b>' + (r.livroAberto ? '' : ' <span class="selo encerrado">Livro encerrado</span>') + '<br><span class="muted pequeno">Salvo em ' + fmtDT(r.atualizadoEm) + ' — ' + esc(r.texto.slice(0, 120)) + (r.texto.length > 120 ? '…' : '') + '</span></div><div class="acoes">' + (r.livroAberto ? '<button class="btn btn-metal" data-c="' + r.id + '">Continuar</button>' : '') + '<button class="btn btn-texto" data-x="' + r.id + '">Descartar</button></div></div>').join('') + '</div></div>' : vazio('Nenhum rascunho pendente.'));
+  $$('[data-c]', v).forEach(b => b.onclick = () => ir('escrever', { rascunho: l.find(r => r.id === b.dataset.c) }));
+  $$('[data-x]', v).forEach(b => b.onclick = async () => {
+    if (!(await confirmar('Descartar rascunho', 'O texto deste rascunho será apagado. Rascunhos não fazem parte do livro.', 'Descartar', true))) return;
+    try { await call('excluirRascunho', { id: b.dataset.x }); toast('Rascunho descartado.', 'ok'); ir('rascunhos'); } catch (e) { erro(e); }
+  });
+};
+
+VIEWS.meus = async function (v) {
+  const l = await call('meusRegistros');
+  v.innerHTML = '<div class="cabecalho"><div><h2 class="titulo">Meus registros</h2><p>Registros assinados por você. Para corrigir, crie uma retificação.</p></div></div>' +
+    (l.length ? '<div class="painel"><div class="lista">' + l.map(r => '<div class="item" style="cursor:default"><div><b>' + esc(r.livroCodigo) + ' · nº ' + pad(r.numero, 4) + ' · ' + esc(r.categoria || 'Sem categoria') + '</b><br><span class="muted pequeno">' + fmtDT(r.finalizadoEm) + ' · ' + esc(r.codigoIntegridade) + ' — ' + esc(r.texto.slice(0, 120)) + (r.texto.length > 120 ? '…' : '') + '</span></div><div class="acoes"><button class="btn" data-l="' + r.livroId + '" data-r="' + r.id + '">Ver no livro</button><button class="btn btn-texto" data-ret="' + r.id + '">Retificar</button></div></div>').join('') + '</div></div>' : vazio('Você ainda não assinou registros.'));
+  $$('[data-l]', v).forEach(b => b.onclick = () => ir('livro', { id: b.dataset.l, reg: b.dataset.r }));
+  $$('[data-ret]', v).forEach(b => b.onclick = () => ir('escrever', { retifica: l.find(r => r.id === b.dataset.ret) }));
+};
+
+VIEWS.escrever = async function (v, p) {
+  const livros = (await call('listarLivros', { paraEscrever: true }));
+  if (!livros.length) { v.innerHTML = '<div class="cabecalho"><div><h2 class="titulo">Escrever</h2></div></div>' + vazio('Nenhum livro aberto em que você esteja autorizado. Fale com seu supervisor.'); return; }
+  const r0 = p.rascunho || null;
+  const ret = p.retifica || (r0 && r0.retificaRegistroId ? { id: r0.retificaRegistroId, numero: r0.retificaNumero, livroCodigo: r0.retificaLivroCodigo } : null);
+  const livrosOk = ret && ret.postoId ? livros.filter(l => l.postoId === ret.postoId) : livros;
+  if (ret && ret.postoId && !livrosOk.length) { v.innerHTML = vazio('Não há livro aberto no posto do registro original para lançar a retificação.'); return; }
+  const lid = (r0 && r0.livroId) || p.livroId || livrosOk[0].id;
+  const est = { id: r0 ? r0.id : '', versao: r0 ? r0.atualizadoEm : '', categoria: r0 ? r0.categoria : '', sujo: false };
+  v.innerHTML = '<div class="cabecalho"><div><h2 class="titulo">' + (ret ? 'Retificação' : 'Novo registro') + '</h2><p>Data, hora e número são gravados no momento da assinatura.</p></div></div>' +
+    (ret ? '<div class="aviso alerta">Este registro corrige o nº ' + pad(ret.numero, 3) + (ret.livroCodigo ? ' do livro ' + esc(ret.livroCodigo) : '') + '. O original continua no livro, sem alteração. Explique abaixo o que está sendo corrigido.</div>' : '') +
+    '<div class="campo"><label for="el">Livro</label><select id="el"' + (r0 ? ' disabled' : '') + '>' + opt(livrosOk.map(l => [l.id, l.codigo + ' — ' + l.postoNome]), lid) + '</select></div>' +
+    (ret ? '' : '<div class="campo"><label>Categoria</label><div class="chips" id="ec">' + st.opcoes.categorias.map(c => '<button type="button" class="chip" aria-pressed="' + (c === est.categoria) + '">' + esc(c) + '</button>').join('') + '</div></div>') +
+    '<div class="campo"><label for="et">Texto do registro</label><div class="folha-escrita"><div class="folha"><textarea id="et" maxlength="5000" placeholder="Descreva com clareza o que aconteceu, horários, pessoas envolvidas e providências.">' + esc(r0 ? r0.texto : '') + '</textarea></div></div><div class="contador" id="ek">0 / 5000</div></div>' +
+    '<div class="acoes"><button class="btn" id="es">' + ico('rascunho') + 'Salvar rascunho</button><button class="btn btn-metal" id="ea">' + ico('caneta') + 'Revisar e assinar</button></div>';
+  const ta = $('#et');
+  const conta = () => { $('#ek').textContent = ta.value.length + ' / 5000'; };
+  conta();
+  ta.oninput = () => { est.sujo = true; conta(); };
+  $$('#ec .chip').forEach(c => c.onclick = () => { $$('#ec .chip').forEach(x => x.setAttribute('aria-pressed', 'false')); const ativo = est.categoria !== c.textContent; est.categoria = ativo ? c.textContent : ''; c.setAttribute('aria-pressed', String(ativo)); est.sujo = true; });
+  const salvar = async () => {
+    if (!ta.value.trim()) { toast('Escreva o texto do registro.', 'erro'); ta.focus(); return null; }
+    const r = await call('salvarRascunho', { id: est.id, livroId: $('#el').value, categoria: est.categoria, texto: ta.value, retificaRegistroId: ret ? ret.id : '' });
+    est.id = r.id; est.versao = r.atualizadoEm; est.sujo = false; $('#el').disabled = true;
+    return r;
+  };
+  $('#es').onclick = async () => { const b = $('#es'); b.disabled = true; try { if (await salvar()) toast('Rascunho salvo. Ele ainda não faz parte do livro.', 'ok'); } catch (e) { erro(e); } b.disabled = false; };
+  $('#ea').onclick = async () => {
+    const b = $('#ea'); b.disabled = true;
+    try {
+      const r = (est.sujo || !est.id) ? await salvar() : { id: est.id, atualizadoEm: est.versao, texto: ta.value, categoria: est.categoria, livroId: $('#el').value };
+      if (r) telaAssinar(Object.assign({}, r, { livro: livros.find(l => l.id === $('#el').value), ret: ret }));
+    } catch (e) { erro(e); }
+    b.disabled = false;
+  };
+};
+
+function telaAssinar(r) {
+  const m = modal('Revisar e assinar', '<div class="folha-escrita" style="margin-bottom:16px"><div class="folha"><div class="entrada" style="margin:0"><div class="meta"><b>' + esc(r.livro.codigo) + '</b><span>' + esc(r.livro.postoNome) + '</span><span>' + esc(st.user.nome) + '</span><span>' + esc(r.ret ? 'Retificação do nº ' + pad(r.ret.numero, 3) : (r.categoria || 'Sem categoria')) + '</span></div><p class="texto">' + esc(r.texto) + '</p></div></div></div>' +
+    '<p class="pequeno muted">Confira o texto. Depois de assinado, ele não poderá ser editado nem excluído — apenas retificado por um novo registro.</p>' +
+    '<div class="campo"><label>Assinatura manuscrita</label><div class="quadro"><canvas id="cv"></canvas><div class="linha-base"></div><div class="dica">Assine com o dedo ou caneta</div></div><div class="acoes" style="justify-content:flex-end"><button class="btn btn-texto" id="cl" type="button">Limpar assinatura</button></div></div>' +
+    '<label class="declaracao"><input type="checkbox" id="cd"><span>' + esc(st.opcoes.declaracao) + '</span></label><br>' +
+    '<div class="campo"><label for="cp">Seu PIN</label><input id="cp" class="pin" type="password" inputmode="numeric" maxlength="8" autocomplete="off"></div>' +
+    '<div class="acoes"><button class="btn btn-metal" id="ca">Assinar registro</button><button class="btn" data-fechar>Voltar e editar</button></div>', { largo: true, semFechar: true });
+  const pad_ = assinaturaPad($('#cv', m));
+  $('#cl', m).onclick = () => pad_.limpar();
+  $('#ca', m).onclick = async () => {
+    if (pad_.vazio()) return toast('Faça sua assinatura no quadro.', 'erro');
+    if (!$('#cd', m).checked) return toast('Marque a declaração para confirmar a autoria.', 'erro');
+    if (!$('#cp', m).value) return toast('Digite seu PIN.', 'erro');
+    const b = $('#ca', m); b.disabled = true; b.textContent = 'Assinando…';
+    try {
+      const f = await call('finalizarRegistro', { id: r.id, versao: r.atualizadoEm, assinatura: pad_.exportar(), declaracao: true, pin: $('#cp', m).value, dispositivo: dispositivo() });
+      modal('Registro assinado', '<div class="sucesso"><p>Registro nº <b>' + pad(f.numero, 4) + '</b> gravado no livro ' + esc(r.livro.codigo) + ' em ' + fmtDT(f.finalizadoEm) + '.</p><p class="muted pequeno">Código de integridade</p><p class="codigo">' + esc(f.codigoIntegridade) + '</p><p class="hash">SHA-256 ' + esc(f.hashRegistro) + '</p></div><div class="acoes"><button class="btn btn-metal" id="sv">Ver no livro</button><button class="btn" id="sn">Novo registro</button></div>', { semFechar: true });
+      $('#sv').onclick = () => { fecharModal(); ir('livro', { id: f.livroId, reg: f.id }); };
+      $('#sn').onclick = () => { fecharModal(); ir('escrever', { livroId: f.livroId }); };
+    } catch (e) { erro(e); b.disabled = false; b.textContent = 'Assinar registro'; $('#cp', m).value = ''; }
+  };
+}
+
+function assinaturaPad(cv) {
+  const ctx = cv.getContext('2d');
+  let tracos = [], atual = null;
+  const ajustar = () => {
+    const r = cv.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+    cv.width = r.width * d; cv.height = r.height * d;
+    ctx.setTransform(d, 0, 0, d, 0, 0);
+    ctx.lineWidth = 2.4; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#0d1b33';
+    redesenhar();
+  };
+  const redesenhar = () => { ctx.clearRect(0, 0, cv.width, cv.height); tracos.forEach(t => { ctx.beginPath(); t.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); ctx.stroke(); }); };
+  const pos = e => { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+  cv.addEventListener('pointerdown', e => { e.preventDefault(); cv.setPointerCapture(e.pointerId); atual = [pos(e)]; tracos.push(atual); });
+  cv.addEventListener('pointermove', e => { if (!atual) return; e.preventDefault(); const p = pos(e), a = atual[atual.length - 1]; atual.push(p); ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(p[0], p[1]); ctx.stroke(); });
+  const fim = () => { atual = null; };
+  cv.addEventListener('pointerup', fim); cv.addEventListener('pointercancel', fim); cv.addEventListener('pointerleave', fim);
+  window.addEventListener('resize', ajustar);
+  setTimeout(ajustar, 20);
+  return {
+    limpar() { tracos = []; redesenhar(); },
+    vazio() { return tracos.reduce((n, t) => n + t.length, 0) < 15; },
+    exportar() {
+      const pts = [].concat.apply([], tracos);
+      let x0 = Math.min(...pts.map(p => p[0])) - 6, y0 = Math.min(...pts.map(p => p[1])) - 6, x1 = Math.max(...pts.map(p => p[0])) + 6, y1 = Math.max(...pts.map(p => p[1])) + 6;
+      const w = x1 - x0, h = y1 - y0;
+      for (let escala = Math.min(1.5, 600 / w, 200 / h); escala > 0.2; escala *= 0.8) {
+        const o = document.createElement('canvas');
+        o.width = Math.max(40, Math.round(w * escala)); o.height = Math.max(20, Math.round(h * escala));
+        const c = o.getContext('2d');
+        c.setTransform(escala, 0, 0, escala, -x0 * escala, -y0 * escala);
+        c.lineWidth = 2.4; c.lineCap = 'round'; c.lineJoin = 'round'; c.strokeStyle = '#0d1b33';
+        tracos.forEach(t => { c.beginPath(); t.forEach((p, i) => i ? c.lineTo(p[0], p[1]) : c.moveTo(p[0], p[1])); c.stroke(); });
+        const url = o.toDataURL('image/png');
+        if (url.length < 47000) return url;
+      }
+      throw { erro: 'Assinatura muito complexa. Limpe e assine novamente.' };
+    }
+  };
+}
+
+/* ---------- PDF ---------- */
+const latin = s => String(s == null ? '' : s).replace(/[\u2018\u2019]/g, "'").replace(/[\u201C\u201D]/g, '"').replace(/[\u2013\u2014]/g, '-').replace(/\u2026/g, '...').replace(/[^\x09\x0A\x0D\x20-\xFF]/g, '?');
+
+async function gerarPdf(livroId, botao) {
+  if (!window.jspdf) return toast('Biblioteca de PDF não carregou. Verifique a internet e recarregue.', 'erro');
+  const txtB = botao.innerHTML; botao.disabled = true; botao.textContent = 'Gerando PDF…';
+  try {
+    const d = await call('dadosPdf', { livroId: livroId });
+    const doc = construirPdf(d);
+    const b64 = doc.output('datauristring').split(',')[1];
+    const s = await call('salvarPdf', { livroId: livroId, base64: b64 });
+    try { doc.save(s.nome); } catch (e) {}
+    modal('PDF gerado', '<p>O PDF foi salvo no Google Drive, na pasta do livro.</p><p class="hash">SHA-256 do arquivo: ' + esc(s.sha256) + '</p><div class="acoes"><a class="btn btn-metal" href="' + esc(s.url) + '" target="_blank" rel="noopener">Abrir PDF no Drive</a></div>');
+  } catch (e) { erro(e); }
+  botao.disabled = false; botao.innerHTML = txtB;
+}
+
+function construirPdf(d) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+  const L = d.livro, W = 210, H = 297, ME = 20, MD = 15, TOP = 34, BASE = H - 20, larg = W - ME - MD;
+  let y = TOP;
+  const novaPagina = () => { doc.addPage(); y = TOP; };
+  const garantir = h => { if (y + h > BASE) novaPagina(); };
+  const escrever = (texto, tam, estilo, cor, entre) => {
+    doc.setFont(estilo === 'mono' ? 'courier' : 'helvetica', estilo === 'b' ? 'bold' : 'normal'); doc.setFontSize(tam); doc.setTextColor(cor || 20);
+    const lh = tam * 0.42 + (entre || 1.4);
+    doc.splitTextToSize(latin(texto), larg).forEach(l => { garantir(lh); doc.text(l, ME, y); y += lh; });
+  };
+  doc.setFillColor(20, 23, 28); doc.rect(0, 0, W, 92, 'F');
+  try { doc.addImage(window.VEGAS_LOGO, 'JPEG', ME, 16, 44, 40); } catch (e) {}
+  doc.setTextColor(255); doc.setFont('helvetica', 'bold'); doc.setFontSize(24); doc.text('LIVRO ATA DIGITAL', 72, 32);
+  doc.setFontSize(13); doc.setTextColor(200, 205, 212); doc.text('VEGAS VIGILÂNCIA', 72, 41);
+  doc.setFont('helvetica', 'italic'); doc.setFontSize(10); doc.text(latin(d.app.slogan), 72, 50);
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(16); doc.setTextColor(255); doc.text(latin('Livro nº ' + L.numero + ' — ' + L.codigo), ME, 76);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(11); doc.setTextColor(200, 205, 212); doc.text(latin(L.postoNome + (d.posto && d.posto.endereco ? ' — ' + d.posto.endereco : '')), ME, 84);
+  y = 106;
+  const linhaInfo = (k, val) => { escrever(k + ': ' + val, 10.5, '', 40, 1.2); };
+  linhaInfo('Situação', L.status === 'ABERTO' ? 'Aberto' : 'Encerrado');
+  linhaInfo('Data de abertura', fmtD(L.dataAbertura) + ' (registrado em ' + fmtDT(L.abertoEm) + ')');
+  linhaInfo('Supervisor responsável', L.supervisorNome);
+  linhaInfo('Encerramento', L.status === 'ENCERRADO' ? fmtDT(L.encerradoEm) + ' por ' + L.encerradoPorNome : '—');
+  linhaInfo('Total de registros assinados', String(L.totalRegistros));
+  linhaInfo('Verificação de integridade na emissão', d.verificacao.ok ? 'ÍNTEGRO' : 'DIVERGÊNCIAS ENCONTRADAS (' + d.verificacao.problemas.length + ')');
+  linhaInfo('Emitido em', fmtDT(d.geradoEm) + ' por ' + d.geradoPor);
+  y += 4;
+  escrever('TERMO DE ABERTURA', 12, 'b', 20, 2);
+  escrever('Este livro, de número ' + L.numero + ', destina-se ao registro das ocorrências e comunicações do posto ' + L.postoNome + ', sob responsabilidade da Vegas Vigilância. Aberto em ' + fmtD(L.dataAbertura) + ' pelo supervisor ' + L.supervisorNome + '. Funcionários autorizados: ' + L.autorizados.map(a => a.nome + ' (' + a.matricula + ')').join('; ') + '.', 10.5, 'mono', 30, 1.8);
+  escrever('Hash de abertura: ' + L.hashGenese, 8, 'mono', 110, 1);
+  if (!d.verificacao.ok) { y += 3; escrever('ATENÇÃO — divergências na verificação: ' + d.verificacao.problemas.join(' | '), 9, 'b', 160, 1.2); }
+
+  novaPagina();
+  d.registros.forEach(r => {
+    garantir(30);
+    doc.setDrawColor(200); doc.line(ME, y - 4, W - MD, y - 4);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(20);
+    doc.text(latin('Registro nº ' + pad(r.numero, 4)), ME, y);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor(80);
+    doc.text(latin(fmtDT(r.finalizadoEm) + '   ' + (r.categoria || 'Sem categoria')), W - MD, y, { align: 'right' });
+    y += 5.5;
+    escrever(r.funcionarioNome + ' — matrícula ' + r.matricula, 9.5, '', 60, 1.2);
+    if (r.tipo === 'RETIFICACAO') escrever('Retificação do registro nº ' + pad(r.retificaNumero, 4) + (r.retificaLivroCodigo && r.retificaLivroCodigo !== L.codigo ? ' do livro ' + r.retificaLivroCodigo : ''), 9.5, 'b', 150, 1.2);
+    if (r.retificadoPor.length) escrever('Retificado pelo registro ' + r.retificadoPor.map(x => 'nº ' + pad(x.numero, 4) + (x.livroCodigo !== L.codigo ? ' (' + x.livroCodigo + ')' : '')).join(', ') + '. Texto original preservado abaixo.', 9.5, 'b', 150, 1.2);
+    y += 1.5;
+    escrever(r.texto, 10.5, 'mono', 25, 1.8);
+    garantir(26);
+    if (r.assinatura) { try { const p = doc.getImageProperties(r.assinatura); const h = 16, w = Math.min(60, p.width / p.height * h); doc.addImage(r.assinatura, 'PNG', ME, y, w, h); } catch (e) {} }
+    doc.setDrawColor(60); doc.line(ME, y + 17, ME + 70, y + 17);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(60);
+    doc.text(latin(r.funcionarioNome + ' — assinado com PIN e assinatura manuscrita em ' + fmtDT(r.finalizadoEm)), ME, y + 21);
+    y += 25;
+    escrever('Integridade ' + r.codigoIntegridade + ' · SHA-256 ' + r.hashRegistro, 7.5, 'mono', 110, 1);
+    y += 6;
+  });
+  if (!d.registros.length) escrever('Nenhum registro assinado neste livro.', 10.5, 'mono', 90);
+
+  garantir(40); y += 4;
+  escrever(L.status === 'ENCERRADO' ? 'TERMO DE ENCERRAMENTO' : 'SITUAÇÃO NA EMISSÃO', 12, 'b', 20, 2);
+  escrever(L.status === 'ENCERRADO' ? 'Livro encerrado em ' + fmtDT(L.encerradoEm) + ' por ' + L.encerradoPorNome + ', contendo ' + L.totalRegistros + ' registro(s) assinado(s).' + (L.obsEncerramento ? ' Observação: ' + L.obsEncerramento : '') : 'Livro aberto. Este documento reflete os ' + L.totalRegistros + ' registro(s) assinados até ' + fmtDT(d.geradoEm) + '.', 10.5, 'mono', 30, 1.8);
+  escrever('Último hash da cadeia: ' + L.ultimoHash + (L.hashEncerramento ? ' · Hash de encerramento: ' + L.hashEncerramento : ''), 8, 'mono', 110, 1);
+
+  const n = doc.getNumberOfPages();
+  for (let i = 1; i <= n; i++) {
+    doc.setPage(i);
+    if (i > 1) {
+      doc.setFillColor(20, 23, 28); doc.rect(0, 0, W, 22, 'F');
+      try { doc.addImage(window.VEGAS_LOGO, 'JPEG', ME, 3, 17.6, 16); } catch (e) {}
+      doc.setTextColor(255); doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.text('LIVRO ATA DIGITAL · VEGAS VIGILÂNCIA', 42, 10);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(200, 205, 212); doc.text(latin(L.codigo + ' — ' + L.postoNome), 42, 16);
+    }
+    doc.setDrawColor(180); doc.line(ME, H - 14, W - MD, H - 14);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(110);
+    doc.text(latin('Vegas Vigilância · ' + L.codigo + ' · emitido em ' + fmtDT(d.geradoEm)), ME, H - 9);
+    doc.text('Página ' + i + ' de ' + n, W - MD, H - 9, { align: 'right' });
+  }
+  return doc;
+}
+
+/* ---------- boot ---------- */
+if (st.token) iniciarApp(); else telaLogin();
+})();
+</script>
