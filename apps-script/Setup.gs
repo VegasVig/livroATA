@@ -3,7 +3,7 @@ function setup() {
   let ss;
   if (props.getProperty('SPREADSHEET_ID')) ss = SpreadsheetApp.openById(props.getProperty('SPREADSHEET_ID'));
   else {
-    ss = SpreadsheetApp.create('LIVRO ATA DIGITAL — VEGAS VIGILÂNCIA (BANCO DE DADOS)');
+    ss = SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.create('LIVRO ATA DIGITAL — VEGAS VIGILÂNCIA (BANCO DE DADOS)');
     props.setProperty('SPREADSHEET_ID', ss.getId());
   }
   __ss = ss;
@@ -34,7 +34,6 @@ function setup() {
     props.setProperty('BACKUP_FOLDER_ID', bk.getId());
   }
   if (!props.getProperty('PIN_PEPPER')) props.setProperty('PIN_PEPPER', Utilities.getUuid() + Utilities.getUuid());
-  if (!props.getProperty('VIEW_PWD_HASH')) definirSenhaConsulta_('Vegas4747');
   if (!props.getProperty('ANCHOR_EMAIL')) props.setProperty('ANCHOR_EMAIL', Session.getEffectiveUser().getEmail());
 
   limparCache_();
@@ -51,7 +50,6 @@ function setup() {
   Logger.log('Planilha: ' + ss.getUrl());
   Logger.log('Pasta raiz: https://drive.google.com/drive/folders/' + props.getProperty('ROOT_FOLDER_ID'));
   if (pinAdmin) Logger.log('ACESSO INICIAL → matrícula: ADMIN | PIN provisório: ' + pinAdmin + ' (troca obrigatória no 1º acesso)');
-  Logger.log('Senha de consulta inicial: definida (Vegas4747). Altere em Configurações.');
 }
 
 function definirEmailAncora(email) { setProp_('ANCHOR_EMAIL', email); }

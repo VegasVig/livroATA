@@ -48,6 +48,8 @@ function opcoes_(p, sess) {
     funcionarios: sess.perfil === PERFIL.FUNCIONARIO ? [] : listarFuncionarios_({}, sess),
     livros: listarLivros_({}, sess).map(function (l) { return { id: l.id, codigo: l.codigo, postoId: l.postoId, postoNome: l.postoNome, status: l.status }; }),
     categorias: APP.CATEGORIAS,
+    catMaterial: APP.CAT_MATERIAL,
+    tiposPosto: APP.TIPOS_POSTO,
     declaracao: APP.DECLARACAO
   };
 }

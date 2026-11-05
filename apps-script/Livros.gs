@@ -9,11 +9,11 @@ function hashEncerramento_(l) {
 function livroPub_(l) {
   const autorizados = csv_(l.autorizados).map(function (id) {
     const f = find_('FUNCIONARIOS', id);
-    return f ? { id: f.id, nome: f.nome, matricula: f.matricula, ativo: f.ativo === '1' } : { id: id, nome: '(removido)', matricula: '', ativo: false };
+    return f ? { id: f.id, nome: f.nome, matricula: cpfMasc_(f.matricula), ativo: f.ativo === '1' } : { id: id, nome: '(removido)', matricula: '', ativo: false };
   });
   const dias = Math.floor((Date.now() - msDe_(l.abertoEm)) / 86400000);
   return {
-    id: l.id, postoId: l.postoId, postoNome: l.postoNome, numero: Number(l.numero), codigo: l.codigo,
+    id: l.id, postoId: l.postoId, postoNome: l.postoNome, postoTipo: l.postoTipo, postoTipoNome: APP.TIPOS_POSTO[l.postoTipo] || '', temSenha: !!l.senhaHash, numero: Number(l.numero), codigo: l.codigo,
     supervisorId: l.supervisorId, supervisorNome: l.supervisorNome, dataAbertura: l.dataAbertura, abertoEm: l.abertoEm,
     autorizados: autorizados, status: l.status, totalRegistros: Number(l.totalRegistros || 0),
     encerradoEm: l.encerradoEm, encerradoPorNome: l.encerradoPorNome, obsEncerramento: l.obsEncerramento,
@@ -57,6 +57,9 @@ function criarLivro_(p, sess) {
   if (!posto || posto.ativo !== '1') throw new AppError('Posto inativo.');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(p.dataAbertura || ''))) throw new AppError('Informe a data de abertura.');
   const autorizados = validarAutorizados_(posto.id, p.autorizados);
+  const senha = String(p.senha || '');
+  if (senha.length < APP.SENHA_LIVRO_MIN) throw new AppError('Defina a senha do livro com ao menos ' + APP.SENHA_LIVRO_MIN + ' caracteres.');
+  const senhaSalt = Utilities.getUuid();
   limparCache_('LIVROS_ATA');
   const livros = all_('LIVROS_ATA').filter(function (l) { return l.postoId === posto.id; });
   if (livros.some(function (l) { return l.status === 'ABERTO'; })) throw new AppError('Este posto já tem um livro aberto. Encerre-o antes de abrir outro.');
@@ -66,13 +69,24 @@ function criarLivro_(p, sess) {
     id: uid_('LIV'), postoId: posto.id, postoNome: txt_(p.postoNome, 120, 'Nome do posto') || posto.nome, numero: String(numero),
     codigo: posto.codigo + '-L' + pad_(numero, 3), supervisorId: sup ? sup.id : sess.uid, supervisorNome: sup ? sup.nome : sess.nome,
     dataAbertura: p.dataAbertura, abertoEm: now_(), autorizados: autorizados.join(','), status: 'ABERTO', totalRegistros: '0',
-    encerradoEm: '', encerradoPorId: '', encerradoPorNome: '', obsEncerramento: '', hashEncerramento: '', pdfFileId: '', pdfGeradoEm: ''
+    encerradoEm: '', encerradoPorId: '', encerradoPorNome: '', obsEncerramento: '', hashEncerramento: '', pdfFileId: '', pdfGeradoEm: '',
+    postoTipo: posto.tipo || '', senhaSalt: senhaSalt, senhaHash: hashPin_(senha, senhaSalt)
   };
   l.hashGenese = hashGenese_(l);
   l.ultimoHash = l.hashGenese;
   insert_('LIVROS_ATA', l);
   log_(sess, 'ABRIR_LIVRO', 'LIVROS_ATA', l.id, { codigo: l.codigo, posto: l.postoNome, autorizados: autorizados });
   return livroPub_(l);
+}
+
+function alterarSenhaLivro_(p, sess) {
+  const l = livroComAcesso_(sess, p.livroId);
+  const senha = String(p.senha || '');
+  if (senha.length < APP.SENHA_LIVRO_MIN) throw new AppError('A senha do livro deve ter ao menos ' + APP.SENHA_LIVRO_MIN + ' caracteres.');
+  const salt = Utilities.getUuid();
+  update_('LIVROS_ATA', l.id, { senhaSalt: salt, senhaHash: hashPin_(senha, salt) });
+  log_(sess, 'ALTERAR_SENHA_LIVRO', 'LIVROS_ATA', l.id, { codigo: l.codigo });
+  return true;
 }
 
 function atualizarAutorizados_(p, sess) {
@@ -112,8 +126,13 @@ function registroPub_(r) {
     texto: r.texto, funcionarioId: r.funcionarioId, funcionarioNome: r.funcionarioNome, matricula: r.matricula,
     retificaRegistroId: r.retificaRegistroId, retificaNumero: r.retificaNumero, retificaLivroCodigo: r.retificaLivroCodigo,
     criadoEm: r.criadoEm, atualizadoEm: r.atualizadoEm, finalizadoEm: r.finalizadoEm, assinaturaId: r.assinaturaId,
-    hashRegistro: r.hashRegistro, hashAnterior: r.hashAnterior, codigoIntegridade: r.codigoIntegridade
+    hashRegistro: r.hashRegistro, hashAnterior: r.hashAnterior, codigoIntegridade: r.codigoIntegridade, itens: lerItens_(r.itens)
   };
+}
+
+function lerItens_(s) {
+  if (!s) return [];
+  try { const v = JSON.parse(s); return Array.isArray(v) ? v : []; } catch (e) { return []; }
 }
 
 function registrosDoLivro_(livroId) {
@@ -135,6 +154,7 @@ function retificadoPor_(registroIds) {
 
 function verLivro_(p, sess) {
   const l = livroComAcesso_(sess, p.livroId);
+  exigeSenhaLivro_(sess, l);
   const regs = registrosDoLivro_(l.id);
   const ret = retificadoPor_(regs.map(function (r) { return r.id; }));
   if (sess.perfil !== PERFIL.FUNCIONARIO) log_(sess, 'CONSULTAR_LIVRO', 'LIVROS_ATA', l.id, { codigo: l.codigo });
@@ -142,12 +162,14 @@ function verLivro_(p, sess) {
     livro: livroPub_(l),
     registros: regs.map(function (r) { const o = registroPub_(r); o.retificadoPor = ret[r.id] || []; return o; }),
     podeEscrever: sess.perfil === PERFIL.FUNCIONARIO && l.status === 'ABERTO' && csv_(l.autorizados).indexOf(sess.refId) >= 0,
-    podeGerir: sess.perfil === PERFIL.SUPERVISOR && l.status === 'ABERTO'
+    podeGerir: sess.perfil === PERFIL.SUPERVISOR && l.status === 'ABERTO',
+    podeSenha: sess.perfil === PERFIL.SUPERVISOR
   };
 }
 
 function assinaturas_(p, sess) {
   const l = livroComAcesso_(sess, p.livroId);
+  exigeSenhaLivro_(sess, l);
   const ids = (p.ids || []).slice(0, 60);
   const out = {};
   all_('ASSINATURAS').forEach(function (a) { if (a.livroId === l.id && ids.indexOf(a.id) >= 0) out[a.id] = a.imagem; });
@@ -161,7 +183,7 @@ function statusAssinaturas_(p, sess) {
     const meus = regs.filter(function (r) { return r.funcionarioId === f.id; });
     const fin = meus.filter(function (r) { return r.status === 'FINALIZADO'; });
     return {
-      id: f.id, nome: f.nome, matricula: f.matricula, autorizado: autorizado,
+      id: f.id, nome: f.nome, matricula: cpfMasc_(f.matricula), autorizado: autorizado,
       assinados: fin.length, rascunhos: meus.length - fin.length,
       ultimoEm: fin.reduce(function (m, r) { return r.finalizadoEm > m ? r.finalizadoEm : m; }, '')
     };
@@ -171,6 +193,6 @@ function statusAssinaturas_(p, sess) {
   return {
     livro: livroPub_(l),
     autorizados: aut.map(function (id) { return find_('FUNCIONARIOS', id); }).filter(Boolean).map(function (f) { return linha(f, true); }),
-    naoAutorizados: doPosto.filter(function (f) { return aut.indexOf(f.id) < 0; }).map(function (f) { return { id: f.id, nome: f.nome, matricula: f.matricula }; })
+    naoAutorizados: doPosto.filter(function (f) { return aut.indexOf(f.id) < 0; }).map(function (f) { return { id: f.id, nome: f.nome, matricula: cpfMasc_(f.matricula) }; })
   };
 }

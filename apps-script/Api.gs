@@ -9,49 +9,42 @@ function rotas_() {
   me: { pin: true, fn: function (p, s) { return usuarioPublico_(s); } },
   logout: { pin: true, fn: function (p, s) { encerrarSessao_(s.token); log_(s, 'LOGOUT', 'USUARIOS', s.uid, {}); s.__fim = true; return true; } },
   trocarPin: { pin: true, fn: trocarPin_ },
-  desbloquearConsulta: { fn: desbloquearConsulta_ },
+  desbloquearLivro: { fn: desbloquearLivro_ },
   inicio: { fn: inicio_ },
   opcoes: { fn: opcoes_ },
 
   listarPostos: { fn: listarPostos_ },
   salvarPosto: { perfis: [A], escrita: true, fn: salvarPosto_ },
   listarFuncionarios: { perfis: [A, S], fn: listarFuncionarios_ },
-  salvarFuncionario: { perfis: [A], escrita: true, fn: salvarFuncionario_ },
+  salvarFuncionario: { perfis: [A, S], escrita: true, fn: salvarFuncionario_ },
   listarSupervisores: { perfis: [A], fn: listarSupervisores_ },
   salvarSupervisor: { perfis: [A], escrita: true, fn: salvarSupervisor_ },
   listarAdmins: { perfis: [A], fn: listarAdmins_ },
   salvarAdmin: { perfis: [A], escrita: true, fn: salvarAdmin_ },
-  redefinirPin: { perfis: [A], escrita: true, fn: redefinirPin_ },
-  definirStatusAcesso: { perfis: [A], escrita: true, fn: definirStatusAcesso_ },
+  redefinirPin: { perfis: [A, S], escrita: true, fn: redefinirPin_ },
+  definirStatusAcesso: { perfis: [A, S], escrita: true, fn: definirStatusAcesso_ },
 
   listarLivros: { fn: listarLivros_ },
   criarLivro: { perfis: [S], escrita: true, fn: criarLivro_ },
   atualizarAutorizados: { perfis: [S], escrita: true, fn: atualizarAutorizados_ },
   encerrarLivro: { perfis: [S], escrita: true, fn: encerrarLivro_ },
-  verLivro: { consulta: true, fn: verLivro_ },
-  assinaturas: { consulta: true, fn: assinaturas_ },
+  verLivro: { fn: verLivro_ },
+  assinaturas: { fn: assinaturas_ },
+  alterarSenhaLivro: { perfis: [S], escrita: true, fn: alterarSenhaLivro_ },
+  ultimoMaterial: { perfis: [F], fn: ultimoMaterial_ },
   statusAssinaturas: { perfis: [A, S], fn: statusAssinaturas_ },
   verificarIntegridade: { perfis: [A, S], fn: verificarIntegridade_ },
-  dadosPdf: { perfis: [A, S], consulta: true, fn: dadosPdf_ },
+  dadosPdf: { perfis: [A, S], fn: dadosPdf_ },
   salvarPdf: { perfis: [A, S], escrita: true, fn: salvarPdf_ },
 
   meusRascunhos: { perfis: [F], fn: meusRascunhos_ },
   salvarRascunho: { perfis: [F], escrita: true, fn: salvarRascunho_ },
   excluirRascunho: { perfis: [F], escrita: true, fn: excluirRascunho_ },
   finalizarRegistro: { perfis: [F], escrita: true, fn: finalizarRegistro_ },
-  meusRegistros: { perfis: [F], consulta: true, fn: meusRegistros_ },
-  buscarRegistros: { perfis: [A, S], consulta: true, fn: buscarRegistros_ },
+  meusRegistros: { perfis: [F], fn: meusRegistros_ },
+  buscarRegistros: { perfis: [A, S], fn: buscarRegistros_ },
 
-  logs: { perfis: [A], fn: listarLogs_ },
-  alterarSenhaConsulta: {
-    perfis: [A], escrita: true, fn: function (p, s) {
-      const u = find_('USUARIOS', s.uid);
-      if (!conferirPin_(u, p.pin)) throw new AppError('PIN incorreto.');
-      definirSenhaConsulta_(p.senha);
-      log_(s, 'ALTERAR_SENHA_CONSULTA', 'SISTEMA', '', {});
-      return true;
-    }
-  }
+  logs: { perfis: [A], fn: listarLogs_ }
 };
   return __rotas;
 }
@@ -69,7 +62,6 @@ function api(acao, token, payload) {
         throw new AppError('Seu perfil não tem permissão para esta ação.', 'FORBIDDEN');
       }
       if (sess.trocarPin && !r.pin) throw new AppError('Defina um novo PIN para continuar.', 'PIN_CHANGE');
-      if (r.consulta && !sess.consulta) throw new AppError('Digite a senha de consulta dos livros.', 'CONSULTA');
     }
     const dados = r.escrita ? withLock_(function () { return r.fn(p, sess); }) : r.fn(p, sess);
     if (sess && !sess.__fim) salvarSessao_(sess);
@@ -86,9 +78,9 @@ function doGet() {
   return t.evaluate()
     .setTitle('Livro ATA Digital — Vegas Vigilância')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1, viewport-fit=cover')
-    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.DEFAULT);
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 
-const PASTA_HTML = 'html/';
+const PASTA_HTML = '';
 
 function include(nome) { return HtmlService.createHtmlOutputFromFile(PASTA_HTML + nome).getContent(); }

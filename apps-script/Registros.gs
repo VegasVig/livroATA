@@ -25,16 +25,18 @@ function originalRetificavel_(sess, regId, postoId) {
 function salvarRascunho_(p, sess) {
   const f = funcionarioAtual_(sess);
   const l = livroParaEscrever_(sess, p.livroId);
-  const categoria = APP.CATEGORIAS.indexOf(p.categoria) >= 0 ? p.categoria : '';
-  const texto = txt_(p.texto, APP.TEXTO_MAX, 'Texto do registro');
   const tipo = p.retificaRegistroId ? 'RETIFICACAO' : 'NORMAL';
+  const categoria = APP.CATEGORIAS.indexOf(p.categoria) >= 0 ? p.categoria : '';
+  if (tipo === 'NORMAL' && !categoria) throw new AppError('Escolha a categoria do registro.');
+  const texto = txt_(p.texto, APP.TEXTO_MAX, 'Texto do registro');
+  const itens = tipo === 'NORMAL' && categoria === APP.CAT_MATERIAL ? itens_(p.itens) : [];
   let orig = null;
   if (tipo === 'RETIFICACAO') orig = originalRetificavel_(sess, p.retificaRegistroId, l.postoId);
   const lvOrig = orig ? find_('LIVROS_ATA', orig.livroId) : null;
   const dados = {
     livroId: l.id, postoId: l.postoId, tipo: tipo, categoria: tipo === 'RETIFICACAO' ? 'Retificação' : categoria, texto: texto,
     retificaRegistroId: orig ? orig.id : '', retificaNumero: orig ? orig.numero : '', retificaLivroCodigo: lvOrig ? lvOrig.codigo : '',
-    atualizadoEm: now_()
+    itens: itens.length ? JSON.stringify(itens) : '', atualizadoEm: now_()
   };
   if (p.id) {
     const r = find_('REGISTROS', p.id);
@@ -44,7 +46,7 @@ function salvarRascunho_(p, sess) {
     return registroPub_(find_('REGISTROS', r.id));
   }
   Object.assign(dados, {
-    id: uid_('REG'), numero: '', status: 'RASCUNHO', funcionarioId: f.id, funcionarioNome: f.nome, matricula: f.matricula,
+    id: uid_('REG'), numero: '', status: 'RASCUNHO', funcionarioId: f.id, funcionarioNome: f.nome, matricula: cpfMasc_(f.matricula),
     criadoEm: dados.atualizadoEm, finalizadoEm: '', assinaturaId: '', hashConteudo: '', hashAnterior: '', hashRegistro: '', codigoIntegridade: ''
   });
   insert_('REGISTROS', dados);
@@ -75,7 +77,7 @@ function canonRegistro_(r, hashImagem) {
     ['registroId', r.id], ['livroId', r.livroId], ['postoId', r.postoId], ['numero', r.numero], ['tipo', r.tipo], ['categoria', r.categoria],
     ['texto', r.texto], ['funcionarioId', r.funcionarioId], ['funcionarioNome', r.funcionarioNome], ['matricula', r.matricula],
     ['retificaRegistroId', r.retificaRegistroId], ['finalizadoEm', r.finalizadoEm], ['assinaturaId', r.assinaturaId], ['hashImagem', hashImagem]
-  ]);
+  ].concat(r.itens ? [['itens', r.itens]] : []));
 }
 
 function finalizarRegistro_(p, sess) {
@@ -95,7 +97,7 @@ function finalizarRegistro_(p, sess) {
   const r = find_('REGISTROS', p.id);
   if (!r || r.funcionarioId !== f.id) throw new AppError('Registro não encontrado.', 'NOT_FOUND');
   if (r.status !== 'RASCUNHO') throw new AppError('Este registro já foi assinado.', 'IMMUTABLE');
-  if (!r.texto.trim()) throw new AppError('O registro está vazio.');
+  if (!r.texto.trim() && !r.itens) throw new AppError('O registro está vazio.');
   if (p.versao && p.versao !== r.atualizadoEm) throw new AppError('O texto foi alterado em outra tela. Revise novamente antes de assinar.');
   const l = livroParaEscrever_(sess, r.livroId);
   if (csv_(f.postoIds).indexOf(l.postoId) < 0) throw new AppError('Você não está mais vinculado a este posto.', 'FORBIDDEN');
@@ -126,7 +128,7 @@ function finalizarRegistro_(p, sess) {
   } catch (e) { console.error('Cópia da assinatura no Drive falhou: ' + e); }
 
   insert_('ASSINATURAS', {
-    id: reg.assinaturaId, registroId: r.id, livroId: l.id, funcionarioId: f.id, funcionarioNome: f.nome, matricula: f.matricula,
+    id: reg.assinaturaId, registroId: r.id, livroId: l.id, funcionarioId: f.id, funcionarioNome: f.nome, matricula: cpfMasc_(f.matricula),
     metodo: 'PIN+MANUSCRITA', imagem: img, arquivoId: arquivoId, hashImagem: hashImagem, declaracao: APP.DECLARACAO, assinadoEm: ts,
     dispositivo: String(p.dispositivo || '').slice(0, 250)
   });
@@ -145,6 +147,26 @@ function finalizarRegistro_(p, sess) {
   log_(sess, 'ASSINAR_REGISTRO', 'REGISTROS', r.id, { livro: l.codigo, numero: reg.numero, tipo: r.tipo, codigo: codigo, hash: hashRegistro });
   limparCache_();
   return registroPub_(find_('REGISTROS', r.id));
+}
+
+function itens_(lista) {
+  if (!Array.isArray(lista)) return [];
+  const l = lista.filter(function (it) { return it && String(it.descricao || '').trim(); });
+  if (l.length > APP.ITENS_MAX) throw new AppError('Máximo de ' + APP.ITENS_MAX + ' itens por registro.');
+  return l.map(function (it) {
+    const descricao = req_(it.descricao, 80, 'Descrição do item');
+    const q = Number(it.qtd);
+    if (!Number.isInteger(q) || q < 1 || q > 9999) throw new AppError('Quantidade inválida no item "' + descricao + '".');
+    return { qtd: String(q), descricao: descricao, serie: txt_(it.serie, 40, 'Número de série') };
+  });
+}
+
+function ultimoMaterial_(p, sess) {
+  const l = livroParaEscrever_(sess, p.livroId);
+  const regs = all_('REGISTROS').filter(function (r) { return r.status === 'FINALIZADO' && r.postoId === l.postoId && r.categoria === APP.CAT_MATERIAL && r.itens; })
+    .sort(function (a, b) { return b.finalizadoEm.localeCompare(a.finalizadoEm); });
+  if (!regs.length) return null;
+  return { itens: lerItens_(regs[0].itens), finalizadoEm: regs[0].finalizadoEm, funcionarioNome: regs[0].funcionarioNome };
 }
 
 function meusRegistros_(p, sess) {
@@ -166,7 +188,7 @@ function buscarRegistros_(p, sess) {
   if (p.categoria) l = l.filter(function (r) { return r.categoria === p.categoria; });
   if (p.de) l = l.filter(function (r) { return r.finalizadoEm.slice(0, 10) >= p.de; });
   if (p.ate) l = l.filter(function (r) { return r.finalizadoEm.slice(0, 10) <= p.ate; });
-  if (p.texto) { const q = norm_(p.texto).toLowerCase(); l = l.filter(function (r) { return r.texto.toLowerCase().indexOf(q) >= 0; }); }
+  if (p.texto) { const q = norm_(p.texto).toLowerCase(); l = l.filter(function (r) { return (r.texto + ' ' + r.itens).toLowerCase().indexOf(q) >= 0; }); }
   l.sort(function (a, b) { return b.finalizadoEm.localeCompare(a.finalizadoEm); });
   log_(sess, 'CONSULTAR_REGISTROS', 'REGISTROS', '', { filtros: p, resultados: l.length });
   return {

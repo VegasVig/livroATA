@@ -8,7 +8,7 @@ function log_(sess, acao, entidade, entidadeId, detalhes, resultado) {
         id: uid_('LOG'),
         dataHora: now_(),
         usuarioId: sess ? sess.uid : '',
-        login: sess ? sess.login : (detalhes && detalhes.login) || '',
+        login: mascLogin_(sess ? sess.login : (detalhes && detalhes.login) || ''),
         perfil: sess ? sess.perfil : '',
         acao: acao,
         entidade: entidade || '',
@@ -24,6 +24,8 @@ function log_(sess, acao, entidade, entidadeId, detalhes, resultado) {
     console.error('Falha ao gravar auditoria: ' + err);
   }
 }
+
+function mascLogin_(l) { return /^\d{11}$/.test(l) ? cpfMasc_(l) : l; }
 
 function canonLog_(e) {
   return canon_([['id', e.id], ['dataHora', e.dataHora], ['usuarioId', e.usuarioId], ['login', e.login], ['perfil', e.perfil], ['acao', e.acao], ['entidade', e.entidade], ['entidadeId', e.entidadeId], ['detalhes', e.detalhes], ['resultado', e.resultado]]);

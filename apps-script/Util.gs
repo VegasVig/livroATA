@@ -25,6 +25,23 @@ function req_(s, max, campo) {
 
 function csv_(s) { return String(s || '').split(',').map(function (x) { return x.trim(); }).filter(String); }
 
+function cpfDigitos_(s) { return String(s || '').replace(/\D/g, ''); }
+
+function cpfValido_(s) {
+  const c = cpfDigitos_(s);
+  if (c.length !== 11 || /^(\d)\1{10}$/.test(c)) return false;
+  for (let t = 9; t < 11; t++) {
+    let soma = 0;
+    for (let i = 0; i < t; i++) soma += Number(c[i]) * (t + 1 - i);
+    if (((soma * 10) % 11) % 10 !== Number(c[t])) return false;
+  }
+  return true;
+}
+
+function cpfFmt_(s) { const c = cpfDigitos_(s); return c.length === 11 ? c.slice(0, 3) + '.' + c.slice(3, 6) + '.' + c.slice(6, 9) + '-' + c.slice(9) : String(s || ''); }
+
+function cpfMasc_(s) { const c = cpfDigitos_(s); return c.length === 11 ? '***.' + c.slice(3, 6) + '.' + c.slice(6, 9) + '-**' : String(s || ''); }
+
 function pad_(n, t) { return ('000000' + n).slice(-t); }
 
 function msDe_(iso) { return iso ? new Date(iso).getTime() : 0; }

@@ -4,11 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0d0f13">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Livro ATA">
 <title>Livro ATA Digital — Vegas Vigilância</title>
-<link rel="manifest" href="manifest.webmanifest">
+<link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-180.png">
 <style>
@@ -18,18 +19,46 @@ iframe{position:fixed;inset:0;width:100%;height:100%;border:0;padding-top:env(sa
 #espera img{width:96px;height:96px;border-radius:14px}
 #espera a{color:#5aa9ff}
 #espera small{max-width:320px;opacity:.75}
+#instalar{position:fixed;left:12px;right:12px;bottom:calc(76px + env(safe-area-inset-bottom));z-index:5;display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:10px;background:#1f242c;border:1px solid #454e5b;box-shadow:0 10px 30px rgba(0,0,0,.5);max-width:440px;margin:0 auto}
+#instalar img{width:40px;height:40px;border-radius:8px}
+#instalar span{flex:1;font-size:.92rem}
+#instalar button{min-height:40px;border-radius:6px;border:0;font:600 .92rem system-ui;cursor:pointer}
+#btnInstalar{padding:0 14px;background:linear-gradient(180deg,#f7f8fa,#c3c9d1 46%,#a3abb6 54%,#e6e9ed);color:#14171c}
+#btnFechar{background:none;color:#c9ced6;padding:0 6px;font-size:1.3rem}
 </style>
 </head>
 <body>
 <div id="espera"><img src="icon-192.png" alt="Vegas Vigilância"><span>Abrindo o Livro ATA…</span><small id="lento" hidden>Demorando? <a id="direto" href="#" target="_blank" rel="noopener">Abrir direto</a></small></div>
 <iframe id="app" title="Livro ATA Digital" allow="clipboard-write"></iframe>
+<div id="instalar" hidden><img src="icon-192.png" alt=""><span id="txtInstalar">Instale o Livro ATA no celular.</span><button id="btnInstalar">Instalar</button><button id="btnFechar" aria-label="Fechar">×</button></div>
 <script>
 const URL_APP = 'https://script.google.com/macros/s/AKfycbzXTasTzX6HUKaBXEUtFTZpYL-Xp70utrGbJVZy2qmZ40E-GrzxLNXg6CYE3y1_YJYb/exec';
 const f = document.getElementById('app');
 document.getElementById('direto').href = URL_APP;
 f.src = URL_APP;
-f.onload = () => setTimeout(() => document.getElementById('espera').remove(), 300);
+f.onload = () => setTimeout(() => { const e = document.getElementById('espera'); if (e) e.remove(); }, 300);
 setTimeout(() => { const l = document.getElementById('lento'); if (l) l.hidden = false; }, 8000);
+
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+
+const caixa = document.getElementById('instalar');
+const instalado = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+const dispensado = () => { try { return localStorage.getItem('ata_inst') === '1'; } catch (e) { return false; } };
+document.getElementById('btnFechar').onclick = () => { caixa.hidden = true; try { localStorage.setItem('ata_inst', '1'); } catch (e) {} };
+let pedido = null;
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); pedido = e; if (!instalado && !dispensado()) caixa.hidden = false; });
+document.getElementById('btnInstalar').onclick = async () => {
+  if (!pedido) return;
+  pedido.prompt();
+  await pedido.userChoice;
+  pedido = null; caixa.hidden = true;
+};
+window.addEventListener('appinstalled', () => { caixa.hidden = true; });
+if (/iphone|ipad|ipod/i.test(navigator.userAgent) && !instalado && !dispensado()) {
+  document.getElementById('txtInstalar').textContent = 'No Safari: toque em Compartilhar e depois em "Adicionar à Tela de Início".';
+  document.getElementById('btnInstalar').hidden = true;
+  caixa.hidden = false;
+}
 </script>
 </body>
 </html>

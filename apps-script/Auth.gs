@@ -62,7 +62,8 @@ function vinculoAtivo_(u) {
 }
 
 function login_(p) {
-  const login = String(p.login || '').trim().toUpperCase();
+  let login = String(p.login || '').trim().toUpperCase();
+  if (/^[\d.\-\s]+$/.test(login)) login = cpfDigitos_(login);
   const pin = String(p.pin || '');
   if (!login || !pin) throw new AppError('Informe matrícula e PIN.');
   return withLock_(function () {
@@ -84,7 +85,7 @@ function novaSessao_(u) {
   const sess = {
     token: Utilities.getUuid() + Utilities.getUuid().replace(/-/g, ''),
     uid: u.id, login: u.login, nome: u.nome, perfil: u.perfil, refId: u.refId,
-    trocarPin: u.trocarPin === '1', consulta: false, criado: agora, ultimo: agora
+    trocarPin: u.trocarPin === '1', livros: [], criado: agora, ultimo: agora
   };
   salvarSessao_(sess);
   return sess;
@@ -113,7 +114,7 @@ function sessao_(token) {
 function encerrarSessao_(token) { CacheService.getScriptCache().remove('S_' + token); }
 
 function usuarioPublico_(sess) {
-  return { nome: sess.nome, login: sess.login, perfil: sess.perfil, trocarPin: sess.trocarPin, consulta: sess.consulta };
+  return { nome: sess.nome, login: /^\d{11}$/.test(sess.login) ? cpfMasc_(sess.login) : sess.login, perfil: sess.perfil, trocarPin: sess.trocarPin };
 }
 
 function trocarPin_(p, sess) {
@@ -130,28 +131,24 @@ function trocarPin_(p, sess) {
   });
 }
 
-function desbloquearConsulta_(p, sess) {
+function desbloquearLivro_(p, sess) {
+  const l = livroComAcesso_(sess, p.livroId);
   const c = CacheService.getScriptCache();
   const k = 'VC_' + sess.uid;
   const n = Number(c.get(k) || 0);
   if (n >= APP.MAX_TENTATIVAS) throw new AppError('Muitas tentativas. Aguarde ' + APP.BLOQUEIO_MIN + ' minutos.', 'LOCKED');
-  const h = prop_('VIEW_PWD_HASH');
-  const salt = prop_('VIEW_PWD_SALT');
-  if (!h || hashPin_(String(p.senha || ''), salt) !== h) {
+  if (!l.senhaHash || hashPin_(String(p.senha || ''), l.senhaSalt) !== l.senhaHash) {
     c.put(k, String(n + 1), APP.BLOQUEIO_MIN * 60);
-    log_(sess, 'SENHA_CONSULTA', 'SISTEMA', '', {}, 'NEGADO');
-    throw new AppError('Senha de consulta incorreta.');
+    log_(sess, 'SENHA_LIVRO', 'LIVROS_ATA', l.id, { codigo: l.codigo }, 'NEGADO');
+    throw new AppError('Senha do livro incorreta.');
   }
   c.remove(k);
-  sess.consulta = true;
-  log_(sess, 'SENHA_CONSULTA', 'SISTEMA', '', {}, 'OK');
-  return usuarioPublico_(sess);
+  sess.livros = (sess.livros || []).filter(function (x) { return x !== l.id; }).concat([l.id]);
+  log_(sess, 'SENHA_LIVRO', 'LIVROS_ATA', l.id, { codigo: l.codigo }, 'OK');
+  return true;
 }
 
-function definirSenhaConsulta_(senha) {
-  const s = String(senha || '');
-  if (s.length < 6) throw new AppError('A senha de consulta deve ter ao menos 6 caracteres.');
-  const salt = Utilities.getUuid();
-  setProp_('VIEW_PWD_SALT', salt);
-  setProp_('VIEW_PWD_HASH', hashPin_(s, salt));
+function exigeSenhaLivro_(sess, l) {
+  if (sess.perfil !== PERFIL.FUNCIONARIO || !l.senhaHash) return;
+  if ((sess.livros || []).indexOf(l.id) < 0) throw new AppError('Digite a senha do livro ' + l.codigo + '.', 'CONSULTA');
 }

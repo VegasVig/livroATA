@@ -12,7 +12,7 @@ function assertPosto_(sess, postoId) {
   }
 }
 
-function postoPub_(p) { return { id: p.id, codigo: p.codigo, nome: p.nome, cliente: p.cliente, endereco: p.endereco, ativo: p.ativo === '1' }; }
+function postoPub_(p) { return { id: p.id, codigo: p.codigo, nome: p.nome, cliente: p.cliente, endereco: p.endereco, ativo: p.ativo === '1', tipo: p.tipo || '', tipoNome: APP.TIPOS_POSTO[p.tipo] || 'Não informado' }; }
 
 function listarPostos_(p, sess) {
   const ids = postosDoUsuario_(sess);
@@ -21,7 +21,8 @@ function listarPostos_(p, sess) {
 
 function salvarPosto_(p, sess) {
   const codigo = req_(p.codigo, 20, 'Código do posto').toUpperCase().replace(/[^A-Z0-9_-]/g, '');
-  const dados = { codigo: codigo, nome: req_(p.nome, 120, 'Nome do posto'), cliente: txt_(p.cliente, 120, 'Cliente'), endereco: txt_(p.endereco, 200, 'Endereço'), ativo: p.ativo === false ? '0' : '1', atualizadoEm: now_() };
+  if (!APP.TIPOS_POSTO[p.tipo]) throw new AppError('Informe se o posto é armado ou não armado.');
+  const dados = { tipo: p.tipo, codigo: codigo, nome: req_(p.nome, 120, 'Nome do posto'), cliente: txt_(p.cliente, 120, 'Cliente'), endereco: txt_(p.endereco, 200, 'Endereço'), ativo: p.ativo === false ? '0' : '1', atualizadoEm: now_() };
   const dup = findBy_('POSTOS', 'codigo', codigo);
   if (dup && dup.id !== p.id) throw new AppError('Já existe um posto com o código ' + codigo + '.');
   if (p.id) {
@@ -49,7 +50,7 @@ function usuarioDe_(refId) { return findBy_('USUARIOS', 'refId', refId); }
 function pessoaPub_(x, tipo) {
   const u = usuarioDe_(x.id);
   return {
-    id: x.id, matricula: x.matricula, nome: x.nome, email: x.email || '', postoIds: csv_(x.postoIds), ativo: x.ativo === '1', tipo: tipo,
+    id: x.id, matricula: x.matricula, cpf: cpfFmt_(x.matricula), nome: x.nome, email: x.email || '', postoIds: csv_(x.postoIds), ativo: x.ativo === '1', tipo: tipo,
     bloqueado: !!(u && u.bloqueadoAte && msDe_(u.bloqueadoAte) > Date.now()), trocarPin: !!(u && u.trocarPin === '1'), ultimoAcesso: u ? u.ultimoAcesso : ''
   };
 }
@@ -72,32 +73,52 @@ function listarAdmins_() {
   });
 }
 
+function assertFuncionarioGerido_(sess, funcId) {
+  if (sess.perfil === PERFIL.ADMIN) return;
+  const f = find_('FUNCIONARIOS', funcId);
+  const meus = postosDoUsuario_(sess);
+  if (!f || !csv_(f.postoIds).some(function (x) { return meus.indexOf(x) >= 0; })) {
+    log_(sess, 'ACESSO_NEGADO', 'FUNCIONARIOS', funcId, {}, 'NEGADO');
+    throw new AppError('Este funcionário não pertence aos seus postos.', 'FORBIDDEN');
+  }
+}
+
 function salvarPessoa_(p, sess, aba, perfil) {
-  const matricula = req_(p.matricula, 30, 'Matrícula').toUpperCase().replace(/\s+/g, '');
+  const cpf = cpfDigitos_(p.cpf);
+  if (!cpfValido_(cpf)) throw new AppError('CPF inválido. Confira os números.');
   const nome = req_(p.nome, 120, 'Nome completo');
-  const postoIds = validarPostos_(p.postoIds || []).join(',');
+  let postoIds = validarPostos_(p.postoIds || []);
+  const geridos = sess.perfil === PERFIL.ADMIN ? null : postosDoUsuario_(sess);
+  if (geridos) {
+    if (!postoIds.length) throw new AppError('Selecione ao menos um posto.');
+    if (postoIds.some(function (x) { return geridos.indexOf(x) < 0; })) throw new AppError('Você só pode vincular funcionários aos seus postos.', 'FORBIDDEN');
+  }
   const t = now_();
-  const dupU = findBy_('USUARIOS', 'login', matricula);
+  const dupU = findBy_('USUARIOS', 'login', cpf);
   if (p.id) {
     const ant = find_(aba, p.id);
     if (!ant) throw new AppError('Cadastro não encontrado.');
+    if (geridos) {
+      assertFuncionarioGerido_(sess, p.id);
+      postoIds = csv_(ant.postoIds).filter(function (x) { return geridos.indexOf(x) < 0; }).concat(postoIds);
+    }
     const u = usuarioDe_(p.id);
-    if (dupU && (!u || dupU.id !== u.id)) throw new AppError('A matrícula ' + matricula + ' já está em uso.');
-    const dados = { matricula: matricula, nome: nome, postoIds: postoIds, atualizadoEm: t };
+    if (dupU && (!u || dupU.id !== u.id)) throw new AppError('O CPF ' + cpfFmt_(cpf) + ' já está cadastrado.');
+    const dados = { matricula: cpf, nome: nome, postoIds: postoIds.join(','), atualizadoEm: t };
     if (aba === 'SUPERVISORES') dados.email = txt_(p.email, 120, 'E-mail');
     update_(aba, p.id, dados);
-    if (u) update_('USUARIOS', u.id, { login: matricula, nome: nome, atualizadoEm: t });
-    log_(sess, 'EDITAR_' + perfil, aba, p.id, { antes: { matricula: ant.matricula, nome: ant.nome, postoIds: ant.postoIds }, depois: dados });
+    if (u) update_('USUARIOS', u.id, { login: cpf, nome: nome, atualizadoEm: t });
+    log_(sess, 'EDITAR_' + perfil, aba, p.id, { antes: { cpf: cpfMasc_(ant.matricula), nome: ant.nome, postoIds: ant.postoIds }, depois: { cpf: cpfMasc_(cpf), nome: nome, postoIds: dados.postoIds } });
     return { pessoa: pessoaPub_(find_(aba, p.id), perfil) };
   }
-  if (dupU) throw new AppError('A matrícula ' + matricula + ' já está em uso.');
+  if (dupU) throw new AppError('O CPF ' + cpfFmt_(cpf) + ' já está cadastrado.');
   const pin = p.pin ? validarPinFormato_(p.pin) : pinAleatorio_();
-  const dados = { id: uid_(perfil === PERFIL.SUPERVISOR ? 'SUP' : 'FUN'), matricula: matricula, nome: nome, postoIds: postoIds, ativo: '1', criadoEm: t, atualizadoEm: t };
+  const dados = { id: uid_(perfil === PERFIL.SUPERVISOR ? 'SUP' : 'FUN'), matricula: cpf, nome: nome, postoIds: postoIds.join(','), ativo: '1', criadoEm: t, atualizadoEm: t };
   if (aba === 'SUPERVISORES') dados.email = txt_(p.email, 120, 'E-mail');
   insert_(aba, dados);
-  criarUsuario_(matricula, nome, perfil, dados.id, pin);
-  log_(sess, 'CRIAR_' + perfil, aba, dados.id, { matricula: matricula, nome: nome, postoIds: postoIds });
-  return { pessoa: pessoaPub_(dados, perfil), pinInicial: pin };
+  criarUsuario_(cpf, nome, perfil, dados.id, pin);
+  log_(sess, 'CRIAR_' + perfil, aba, dados.id, { cpf: cpfMasc_(cpf), nome: nome, postoIds: dados.postoIds });
+  return { pessoa: pessoaPub_(dados, perfil), pinInicial: pin, login: cpfFmt_(cpf) };
 }
 
 function salvarFuncionario_(p, sess) { return salvarPessoa_(p, sess, 'FUNCIONARIOS', PERFIL.FUNCIONARIO); }
@@ -121,28 +142,32 @@ function salvarAdmin_(p, sess) {
   return { pessoa: { id: u.id }, pinInicial: pin };
 }
 
-function usuarioAlvo_(p) {
+function usuarioAlvo_(p, sess) {
+  if (sess && sess.perfil === PERFIL.SUPERVISOR) {
+    if (p.tipo !== 'FUNCIONARIO') throw new AppError('Permissão negada.', 'FORBIDDEN');
+    assertFuncionarioGerido_(sess, p.id);
+  }
   const u = p.tipo === 'ADMIN' ? find_('USUARIOS', p.id) : usuarioDe_(p.id);
   if (!u) throw new AppError('Acesso não encontrado.');
   return u;
 }
 
 function redefinirPin_(p, sess) {
-  const u = usuarioAlvo_(p);
+  const u = usuarioAlvo_(p, sess);
   const pin = pinAleatorio_();
   const salt = Utilities.getUuid();
   update_('USUARIOS', u.id, { pinHash: hashPin_(pin, salt), salt: salt, trocarPin: '1', tentativas: '0', bloqueadoAte: '', atualizadoEm: now_() });
-  log_(sess, 'REDEFINIR_PIN', 'USUARIOS', u.id, { login: u.login });
-  return { pinInicial: pin, login: u.login };
+  log_(sess, 'REDEFINIR_PIN', 'USUARIOS', u.id, { usuario: u.nome });
+  return { pinInicial: pin, login: /^\d{11}$/.test(u.login) ? cpfFmt_(u.login) : u.login };
 }
 
 function definirStatusAcesso_(p, sess) {
-  const u = usuarioAlvo_(p);
+  const u = usuarioAlvo_(p, sess);
   if (u.id === sess.uid) throw new AppError('Você não pode alterar o próprio acesso.');
   const t = now_();
   if (p.acao === 'desbloquear') {
     update_('USUARIOS', u.id, { tentativas: '0', bloqueadoAte: '', atualizadoEm: t });
-    log_(sess, 'DESBLOQUEAR_ACESSO', 'USUARIOS', u.id, { login: u.login });
+    log_(sess, 'DESBLOQUEAR_ACESSO', 'USUARIOS', u.id, { usuario: u.nome });
     return true;
   }
   const ativo = p.acao === 'ativar' ? '1' : '0';
@@ -150,6 +175,6 @@ function definirStatusAcesso_(p, sess) {
   update_('USUARIOS', u.id, { ativo: ativo, atualizadoEm: t });
   if (u.perfil === PERFIL.FUNCIONARIO) update_('FUNCIONARIOS', u.refId, { ativo: ativo, atualizadoEm: t });
   if (u.perfil === PERFIL.SUPERVISOR) update_('SUPERVISORES', u.refId, { ativo: ativo, atualizadoEm: t });
-  log_(sess, ativo === '1' ? 'ATIVAR_ACESSO' : 'DESATIVAR_ACESSO', 'USUARIOS', u.id, { login: u.login });
+  log_(sess, ativo === '1' ? 'ATIVAR_ACESSO' : 'DESATIVAR_ACESSO', 'USUARIOS', u.id, { usuario: u.nome });
   return true;
 }
