@@ -570,8 +570,9 @@ VIEWS.escrever = async function (v, p) {
     $('#em').hidden = !mat;
     $('#etl').textContent = mat ? 'Observações (opcional)' : 'Texto do registro';
     if (mat) {
-      const tipo = (livroAtual() || {}).postoTipo || 'DESARMADO';
-      $('#eg').innerHTML = (SUGESTOES[tipo] || SUGESTOES.DESARMADO).map(t => '<button type="button" class="chip">' + esc(t) + '</button>').join('');
+      const tipo = (livroAtual() || {}).postoTipo;
+      const lista = SUGESTOES[tipo] || SUGESTOES.ARMADO.concat(SUGESTOES.DESARMADO.filter(x => SUGESTOES.ARMADO.indexOf(x) < 0));
+      $('#eg').innerHTML = lista.map(t => '<button type="button" class="chip">' + esc(t) + '</button>').join('');
       $$('#eg .chip').forEach(c => c.onclick = () => { est.itens.push({ qtd: 1, descricao: c.textContent, serie: '' }); est.sujo = true; desenharItens(); const l = $$('#ei [data-k="descricao"]'); if (l.length) l[l.length - 1].focus(); });
       desenharItens();
     }
